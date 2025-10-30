@@ -1,5 +1,6 @@
 import os
 import random
+import json
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from google.adk.runners import Runner
@@ -28,13 +29,17 @@ app = FastAPI()
 async def idle():
     return FileResponse("assets/idle.png")
 
+@app.get("/blink")
+async def blink():
+    return FileResponse("assets/blink.png")
+
 @app.get("/talk")
 async def talk():
     return FileResponse("assets/talk.png")
 
 @app.get("/think")
 async def think():
-    return FileResponse("assets/thinking.png")
+    return FileResponse("assets/think.png")
 
 @app.get("/random_image")
 async def random_image():
@@ -61,6 +66,7 @@ async def get_chat_ui():
                 --pc98-cyan: #00ffff;
                 --pc98-border: #5555aa;
                 --pc98-dark-gray: #222244;
+                --pc98-amber: #ffb700;
             }
             body { 
                 font-family: 'VT323', monospace;
@@ -80,8 +86,19 @@ async def get_chat_ui():
                 display: flex;
                 gap: 20px;
             }
+            #left-panel {
+                width: 600px;
+                display: flex;
+                flex-direction: column;
+            }
+            #right-panel {
+                width: 240px;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
             #chat-container { 
-                width: 600px; 
+                flex-grow: 1;
                 border: 4px double var(--pc98-border);
                 padding: 20px; 
                 background-color: var(--pc98-bg);
@@ -128,16 +145,12 @@ async def get_chat_ui():
             }
             .user-message { text-align: right; color: var(--pc98-cyan); margin-bottom: 8px; }
             .agent-message { color: var(--pc98-green); margin-bottom: 8px; white-space: pre-wrap; }
-            #avatar-container {
-                width: 220px;
-                text-align: center;
-            }
+            
             #avatar-window {
-                width: 200px;
-                height: 200px;
+                width: 240px;
+                height: 240px;
                 border: 4px ridge var(--pc98-border);
                 background-color: #000011;
-                margin: 0 auto 15px;
                 display: flex;
                 justify-content: center;
                 align-items: center;
@@ -147,36 +160,52 @@ async def get_chat_ui():
                 max-width: 100%;
                 max-height: 100%;
             }
+            
             #avatar-label {
                 color: var(--pc98-green);
                 font-size: 24px;
+                text-align: center;
                 text-shadow: 0 0 5px var(--pc98-green);
                 border: 2px solid var(--pc98-border);
                 padding: 5px;
                 background-color: var(--pc98-dark-gray);
             }
-            /* Blinking cursor effect for input */
-            @keyframes blink { 50% { opacity: 0; } }
-            #user-input input:focus + #cursor {
-                animation: blink 1s step-end infinite;
+            #system-log-window {
+                flex-grow: 1;
+                border: 4px double var(--pc98-border);
+                background-color: #000011;
+                padding: 10px;
+                font-size: 16px;
+                overflow-y: auto;
+                height: 200px;
+                scrollbar-width: thin;
+                scrollbar-color: var(--pc98-border) #000011;
             }
+            .log-entry { margin-bottom: 4px; line-height: 1.2; }
+            .log-time { color: var(--pc98-cyan); margin-right: 5px; }
+            .log-sys { color: var(--pc98-amber); }
         </style>
     </head>
     <body>
         <div id="main-container">
-            <div id="chat-container">
-                <div id="header">*** EMERGENCY DIAGNOSTIC AGENT ***</div>
-                <div id="messages"></div>
-                <form id="user-input" onsubmit="sendMessage(event)">
-                    <span id="prompt-symbol">AIDA&gt;</span>
-                    <input type="text" id="message-text" autocomplete="off" autofocus />
-                </form>
+            <div id="left-panel">
+                <div id="chat-container">
+                    <div id="header">*** EMERGENCY DIAGNOSTIC AGENT ***</div>
+                    <div id="messages"></div>
+                    <form id="user-input" onsubmit="sendMessage(event)">
+                        <span id="prompt-symbol">AIDA&gt;</span>
+                        <input type="text" id="message-text" autocomplete="off" autofocus />
+                    </form>
+                </div>
             </div>
-            <div id="avatar-container">
+            <div id="right-panel">
                 <div id="avatar-window">
                     <img src="/idle" alt="Agent Avatar" id="avatar-img">
                 </div>
                 <div id="avatar-label">STATUS: ONLINE</div>
+                <div id="system-log-window">
+                    <div id="system-log"></div>
+                </div>
             </div>
         </div>
         <script>
@@ -184,6 +213,52 @@ async def get_chat_ui():
             const messageText = document.getElementById('message-text');
             const avatarImg = document.getElementById('avatar-img');
             const avatarLabel = document.getElementById('avatar-label');
+            const systemLog = document.getElementById('system-log');
+            const logWindow = document.getElementById('system-log-window');
+
+            function logActivity(message, type = 'info') {
+                const now = new Date();
+                const timeStr = now.toTimeString().split(' ')[0];
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-sys">${message}</span>`;
+                systemLog.appendChild(entry);
+                logWindow.scrollTop = logWindow.scrollHeight;
+            }
+
+            // Boot sequence simulation
+            setTimeout(() => logActivity("SYSTEM STARTUP..."), 500);
+            setTimeout(() => logActivity("LOADING KERNEL..."), 1200);
+            setTimeout(() => logActivity("CONNECTING TO OSQUERY DAEMON..."), 2000);
+            setTimeout(() => logActivity("RAG DATABASE LOADED (283 tables)."), 2800);
+            setTimeout(() => logActivity("AIDA AGENT READY."), 3500);
+
+            // Idle blinking logic
+            let blinkInterval = null;
+            function startBlinking() {
+                if (blinkInterval) return;
+                // Blink every 4-8 seconds randomly (slower)
+                blinkInterval = setTimeout(function blink() {
+                    avatarImg.src = '/blink';
+                    setTimeout(() => {
+                        // Only switch back to idle if we are still in ONLINE state
+                        if (avatarLabel.textContent === "STATUS: ONLINE") {
+                             avatarImg.src = '/idle';
+                        }
+                    }, 300); // Eyes closed for 300ms
+                    blinkInterval = setTimeout(blink, Math.random() * 4000 + 4000);
+                }, 4000);
+            }
+
+            function stopBlinking() {
+                if (blinkInterval) {
+                    clearTimeout(blinkInterval);
+                    blinkInterval = null;
+                }
+            }
+
+            // Start blinking initially
+            startBlinking();
 
             async function sendMessage(event) {
                 event.preventDefault();
@@ -198,14 +273,18 @@ async def get_chat_ui():
                 messageText.value = '';
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
+                logActivity(`INPUT RECEIVED: "${query.substring(0, 20)}${query.length > 20 ? '...' : ''}"`);
+
                 // Create a container for the agent's response
                 const agentMsgDiv = document.createElement('div');
                 agentMsgDiv.className = 'agent-message';
                 messagesDiv.appendChild(agentMsgDiv);
 
+                stopBlinking();
                 avatarImg.src = '/think'; // Set to thinking pose
                 avatarLabel.textContent = "STATUS: THINKING";
                 avatarLabel.style.color = "var(--pc98-cyan)";
+                logActivity("AGENT STATUS: THINKING...");
 
                 try {
                     // Stream agent response
@@ -217,31 +296,18 @@ async def get_chat_ui():
 
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
-                    let wordQueue = [];
+                    let buffer = "";
                     let isStreaming = true;
-
-                    // Asynchronously read from the stream and populate the word queue
-                    (async () => {
-                        while (true) {
-                            const { value, done } = await reader.read();
-                            if (done) {
-                                isStreaming = false;
-                                break;
-                            }
-                            const chunk = decoder.decode(value, { stream: true });
-                            // Split by characters for a more retro typing feel, or keep words if preferred
-                            wordQueue.push(...chunk.split('')); 
-                        }
-                    })();
 
                     let animationInterval = null;
 
-                    function startAnimation() {
+                    function startTalkingAnimation() {
                         if (animationInterval) return;
                         let toggle = false;
                         avatarImg.src = '/talk';
                         avatarLabel.textContent = "STATUS: RESPONDING";
                         avatarLabel.style.color = "var(--pc98-green)";
+                        // logActivity("AGENT STATUS: RESPONDING..."); // Logged via stream now hopefully
                         animationInterval = setInterval(() => {
                             toggle = !toggle;
                             avatarImg.src = toggle ? '/talk' : '/idle';
@@ -256,28 +322,54 @@ async def get_chat_ui():
                         avatarImg.src = '/idle';
                         avatarLabel.textContent = "STATUS: ONLINE";
                         avatarLabel.style.color = "var(--pc98-green)";
+                        logActivity("AGENT STATUS: IDLE.");
+                        startBlinking();
                     }
 
-                    function render() {
-                        if (wordQueue.length > 0) {
-                            startAnimation();
-                            const char = wordQueue.shift();
-                            agentMsgDiv.textContent += char;
-                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                            setTimeout(render, 20); // Slightly faster character-based typing
-                        } else if (isStreaming) {
-                            setTimeout(render, 50);
-                        } else {
-                            stopAnimation();
+                    // Asynchronously read from the stream
+                    (async () => {
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) {
+                                stopAnimation();
+                                break;
+                            }
+                            buffer += decoder.decode(value, { stream: true });
+                            
+                            // Process complete lines from buffer
+                            let lineEnd;
+                            while ((lineEnd = buffer.indexOf('\n')) !== -1) {
+                                const line = buffer.substring(0, lineEnd).trim();
+                                buffer = buffer.substring(lineEnd + 1);
+                                if (line) {
+                                    try {
+                                        const data = JSON.parse(line);
+                                        if (data.type === 'log') {
+                                            logActivity(data.content);
+                                        } else if (data.type === 'text') {
+                                            startTalkingAnimation();
+                                            // Append text character by character for retro feel
+                                            for (const char of data.content) {
+                                                agentMsgDiv.textContent += char;
+                                                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                                await new Promise(r => setTimeout(r, 10)); // Tiny delay for typing effect
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.error("Error parsing JSON line:", line, e);
+                                    }
+                                }
+                            }
                         }
-                    }
+                    })();
 
-                    render();
                 } catch (e) {
                     avatarImg.src = '/idle';
                     avatarLabel.textContent = "STATUS: ERROR";
                     avatarLabel.style.color = "red";
                     agentMsgDiv.textContent = "ERROR: CONNECTION LOST";
+                    logActivity("ERROR: CONNECTION LOST!", "error");
+                    startBlinking();
                 }
             }
         </script>
@@ -293,7 +385,7 @@ async def chat_handler(request: Request):
     body = await request.json()
     query = body.get("query")
     user_id = "web_user"
-    session_id = "web_session" # In a real app, you'd manage sessions per user
+    session_id = "web_session"
 
     # Ensure a session exists
     session = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
@@ -301,20 +393,35 @@ async def chat_handler(request: Request):
         session = await session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
 
     async def stream_generator():
-        """Streams the agent's final text response chunks."""
+        """Streams JSON-formatted events for logs and text."""
         full_response = ""
         async for event in runner.run_async(
             user_id=user_id,
             session_id=session_id,
             new_message=Content(role="user", parts=[Part.from_text(text=query)]),
         ):
-            if event.is_final_response() and event.content and event.content.parts[0].text:
-                new_text = event.content.parts[0].text
-                # Yield only the new part of the text
-                yield new_text[len(full_response):]
-                full_response = new_text
+            # Try to capture tool calls from the event
+            if event.content and event.content.parts:
+                for part in event.content.parts:
+                    # Check for function calls (standard Gemini/Gemma structure)
+                    if hasattr(part, 'function_call') and part.function_call:
+                        fc = part.function_call
+                        # Format args nicely
+                        args_str = ", ".join(f"{k}='{v}'" for k, v in fc.args.items())
+                        log_msg = f"EXECUTING: {fc.name}({args_str})"
+                        yield json.dumps({"type": "log", "content": log_msg}) + "\n"
+            
+            # Capture final text response
+            if event.is_final_response() and event.content and event.content.parts:
+                 for part in event.content.parts:
+                     if hasattr(part, 'text') and part.text:
+                        new_text = part.text
+                        chunk = new_text[len(full_response):]
+                        if chunk:
+                            yield json.dumps({"type": "text", "content": chunk}) + "\n"
+                            full_response = new_text
 
-    return StreamingResponse(stream_generator(), media_type="text/plain")
+    return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
 
 # To run this file:
 # 1. Make sure you have fastapi and uvicorn installed: pip install fastapi uvicorn
