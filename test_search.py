@@ -1,79 +1,105 @@
-import apsw
-import importlib.resources
 import os
-import json
+import sqlite3
+
+# Try to use importlib.resources for Python 3.9+
+try:
+    from importlib.resources import files
+except ImportError:
+    pass
 
 DB_PATH = os.path.abspath("osquery.db")
-MODEL_PATH = os.path.abspath("./models/unsloth/embeddinggemma-300m-GGUF/embeddinggemma-300M-Q8_0.gguf")
+# Adjust model path if necessary, assuming it's relative to project root
+MODEL_PATH = os.path.abspath(
+    "./models/unsloth/embeddinggemma-300m-GGUF/embeddinggemma-300M-Q8_0.gguf"
+)
+
 
 def get_extensions():
+    # Locate the extension binaries using importlib.resources if possible,
+    # otherwise fall back to assumed paths in site-packages.
     try:
-        ai_ext = str(importlib.resources.files("sqliteai.binaries.cpu") / "ai")
-        vec_ext = str(importlib.resources.files("sqlite_vector.binaries") / "vector")
-    except Exception:
-        site_packages = os.path.abspath(".venv/lib/python3.12/site-packages")
-        ai_ext = os.path.join(site_packages, "sqliteai/binaries/cpu/ai")
-        vec_ext = os.path.join(site_packages, "sqlite_vector/binaries/vector")
-    return ai_ext, vec_ext
+        import sqliteai
+
+        # Based on the ls -R output:
+        # sqlite_vector/binaries/vector.dylib
+        # sqliteai/binaries/cpu/ai.dylib
+
+        ai_ext = str(files("sqliteai") / "binaries" / "cpu" / "ai.dylib")
+        vec_ext = str(files("sqlite_vector") / "binaries" / "vector.dylib")
+
+        if not os.path.exists(ai_ext):
+            raise FileNotFoundError(f"AI extension not found at {ai_ext}")
+        if not os.path.exists(vec_ext):
+            raise FileNotFoundError(f"Vector extension not found at {vec_ext}")
+
+        return ai_ext, vec_ext
+    except Exception as e:
+        print(f"Error locating extensions via importlib: {e}")
+        # Fallback to hardcoded relative paths if in a venv
+        import sqliteai
+
+        site_packages = os.path.abspath(
+            os.path.join(os.path.dirname(sqliteai.__file__), "..")
+        )
+        ai_ext = os.path.join(site_packages, "sqliteai/binaries/cpu/ai.dylib")
+        vec_ext = os.path.join(site_packages, "sqlite_vector/binaries/vector.dylib")
+        return ai_ext, vec_ext
+
 
 def get_conn():
-    conn = apsw.Connection(DB_PATH)
-    conn.enableloadextension(True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.enable_load_extension(True)
     ai_ext, vec_ext = get_extensions()
-    conn.loadextension(ai_ext)
-    conn.loadextension(vec_ext)
+    conn.load_extension(ai_ext)
+    conn.load_extension(vec_ext)
     return conn
+
 
 def search(query, k=5):
     conn = get_conn()
     cursor = conn.cursor()
-    
+
     # Load model and context for query embedding
-    # We might need to keep the model loaded in a real app, but for CLI tool it's fine to load per query
     cursor.execute("SELECT llm_model_load(?, 'n_gpu_layers=0');", (MODEL_PATH,))
-    cursor.execute("SELECT llm_context_create('n_ctx=2048,embedding_type=INT8,pooling_type=mean,generate_embedding=1,normalize_embedding=1');")
-    
+    cursor.execute(
+        "SELECT llm_context_create('n_ctx=2048,embedding_type=INT8,pooling_type=mean,generate_embedding=1,normalize_embedding=1');"
+    )
+
     # Generate query embedding
     cursor.execute("SELECT llm_embed_generate(?)", (query,))
     query_embedding = cursor.fetchone()[0]
-    
-    # Ensure vector context is loaded
+
+    # Ensure vector context is loaded (copied from osquery_rag.py)
     try:
-        cursor.execute("SELECT vector_init('chunks', 'embedding', 'type=INT8,dimension=768');")
-    except apsw.SQLError:
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_vec'"
+        )
+        if not cursor.fetchone():
+            cursor.execute(
+                "SELECT vector_init('chunks', 'embedding', 'type=INT8,dimension=768');"
+            )
+    except sqlite3.OperationalError:
         pass
 
-    # Perform vector search
-    # Try vector_top_k first, it's the modern entry point.
-    # If it fails (e.g. due to quantization mismatch in how it's called), try vector_quantize_scan.
-    try:
-        cursor.execute("""
-            SELECT
-                documents.uri,
-                chunks.content,
-                v.distance
-            FROM vector_top_k('chunks', 'embedding', ?, ?) AS v
-            JOIN chunks ON chunks.id = v.rowid
-            JOIN documents ON documents.id = chunks.document_id
-            ORDER BY v.distance ASC
-        """, (query_embedding, k))
-        results = cursor.fetchall()
-    except apsw.SQLError as e:
-        # print(f"vector_top_k failed: {e}, trying vector_quantize_scan")
-        cursor.execute("""
-            SELECT
-                documents.uri,
-                chunks.content,
-                v.distance
-            FROM vector_quantize_scan('chunks', 'embedding', ?, ?) AS v
-            JOIN chunks ON chunks.id = v.rowid
-            JOIN documents ON documents.id = chunks.document_id
-            ORDER BY v.distance ASC
-        """, (query_embedding, k))
-        results = cursor.fetchall()
+    # Perform vector search using vector_quantize_scan as in osquery_rag.py
+    cursor.execute(
+        """
+        SELECT
+            documents.uri,
+            chunks.content,
+            v.distance
+        FROM vector_quantize_scan('chunks', 'embedding', ?, ?) AS v
+        JOIN chunks ON chunks.id = v.rowid
+        JOIN documents ON documents.id = chunks.document_id
+        ORDER BY v.distance ASC
+    """,
+        (query_embedding, k),
+    )
+    results = cursor.fetchall()
 
     conn.close()
     return results
+
 
 if __name__ == "__main__":
     query = "What table contains process information?"

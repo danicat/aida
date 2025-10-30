@@ -7,7 +7,7 @@ AIDA is grounded by a local Retrieval-Augmented Generation (RAG) system. It look
 ## Architecture & RAG
 
 AIDA runs entirely locally for maximum privacy:
-*   **Agent Brain**: Powered by **Gemma 3 27B** (via Ollama).
+*   **Agent Brain**: Powered by **Qwen 2.5** (via Ollama), chosen for its robust tool-calling capabilities.
 *   **Tooling**: It can execute real read-only queries on your host system using `osqueryi`.
 *   **RAG Knowledge Base**: A purely local SQLite database containing all osquery table specifications.
     *   **Embeddings**: Generated in-database using `sqlite-ai` and the `embeddinggemma-300m` model.
@@ -19,12 +19,12 @@ When you ask AIDA a question like "check my battery health", it first queries it
 
 *   Python 3.12+
 *   `git`
-*   **Ollama** running locally with `gemma3:27b` pulled (for the main agent).
+*   **Ollama** running locally.
 *   `osquery` installed on the host system (for executing actual queries).
 
 ## Quick Setup
 
-We provide a setup script to automate the entire initialization process, including installing dependencies, fetching data, downloading the embedding model, and building the RAG database.
+We provide a setup script to automate the entire initialization process, including installing dependencies, fetching data, downloading the embedding model, pulling the LLM, and building the RAG database.
 
 ```bash
 ./setup.sh
@@ -44,15 +44,27 @@ uvicorn main:app --reload
 
 Access the UI at `http://127.0.0.1:8000`.
 
-### Development Mode (ADK Web)
+### Development
 
-For development, you can also run the agent using the Agent Development Kit (ADK) web runner. This requires `google-adk` to be installed (which is handled by `setup.sh`).
-
+#### Running with ADK Web
+For a richer development experience with debugging tools:
 ```bash
 adk web aida.agent:root_agent
 ```
 
-This will start a development server, typically at `http://localhost:5173`, providing a richer debugging interface for the agent's thought process and tool usage.
+#### Linting & Formatting
+We use `ruff` for linting and formatting.
+
+```bash
+# Check for issues
+ruff check .
+
+# Fix fixable issues
+ruff check --fix .
+
+# Format code
+ruff format .
+```
 
 ### Standalone RAG Testing
 

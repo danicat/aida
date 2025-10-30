@@ -5,15 +5,15 @@ AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osque
 
 ## Architecture
 *   **Agent Framework**: Built using `google.adk`.
-*   **LLM**: Uses a local **Gemma 3 27B** model hosted via **Ollama** (`ollama_chat/gemma3:27b`).
+*   **LLM**: Uses a local **Qwen 2.5** model hosted via **Ollama** (`ollama_chat/qwen2.5`), chosen for its reliable tool-calling capabilities.
 *   **RAG System**: A purely local implementation using **SQLite**.
-    *   Uses `sqlite-vec` for vector search.
-    *   Uses `sqlite-ai` with the `embeddinggemma-300m` GGUF model for in-database embedding generation.
-    *   Data source: Official `osquery` `.table` specification files.
+    *   **Embeddings**: Generated in-database using `sqlite-ai` and the `embeddinggemma-300m` GGUF model.
+    *   **Search**: Performed using `sqlite-vec` for fast, local vector retrieval.
+    *   **Data Source**: Official `osquery` `.table` specification files.
 *   **Web Interface**: A **FastAPI** application serving a simple HTML/JS chat UI.
 
 ## Key Files
-*   **`setup.sh`**: Automates the entire environment setup (dependencies, data fetching, model download, ingestion).
+*   **`setup.sh`**: Automates the entire environment setup (dependencies, data fetching, model download/pull, ingestion).
 *   **`cleanup.sh`**: Removes generated data, models, and the database to reset the environment.
 *   **`main.py`**: The FastAPI entry point. Sets up the web server, static assets, and the chat endpoint.
 *   **`aida/agent.py`**: Defines the `root_agent`, its persona, and tools (`run_osquery`, `schema_discovery`).
@@ -25,7 +25,7 @@ AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osque
 
 ### Prerequisites
 *   Python 3.12+
-*   **Ollama** running locally with `gemma3:27b` pulled.
+*   **Ollama** running locally.
 *   `osquery` installed on the host system.
 
 ### Automated Setup
@@ -37,7 +37,8 @@ This script will:
 1.  Install Python dependencies from `requirements.txt`.
 2.  Clone the `osquery` repository (sparse checkout of `specs`).
 3.  Download the `embeddinggemma-300m` model.
-4.  Run `ingest_osquery.py` to build the knowledge base.
+4.  Pull the `qwen2.5` model via Ollama.
+5.  Run `ingest_osquery.py` to build the knowledge base.
 
 ### Running the Agent
 Start the web interface:
@@ -56,3 +57,4 @@ To reset the project to its initial state:
 *   **Tool Use**: The agent uses a manual tool invocation pattern (wrapping calls in ` ```tool_code ``` ` blocks) as defined in `aida/agent.py`.
 *   **Database**: Uses standard Python `sqlite3`. Extensions (`sqlite-vec`, `sqlite-ai`) are loaded manually into the connection.
 *   **Local-First**: All components are local. Avoid adding external API dependencies.
+*   **Linting**: Use `ruff check .` and `ruff format .` to maintain code quality.

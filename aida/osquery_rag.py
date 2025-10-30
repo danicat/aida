@@ -1,6 +1,5 @@
 import sqlite3
 import os
-import json
 
 # Try to use importlib.resources for Python 3.9+
 try:
@@ -16,8 +15,6 @@ MODEL_PATH = os.path.join(PROJECT_ROOT, "models/unsloth/embeddinggemma-300m-GGUF
 
 def get_extensions():
     try:
-        import sqliteai
-        import sqlite_vector
         
         ai_ext = str(files("sqliteai") / "binaries" / "cpu" / "ai.dylib")
         vec_ext = str(files("sqlite_vector") / "binaries" / "vector.dylib")

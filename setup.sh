@@ -6,12 +6,12 @@ echo " AIDA - Emergency Diagnostic Agent Setup"
 echo "========================================"
 
 # 1. Install Dependencies
-echo "[1/4] Installing Python dependencies..."
+echo "[1/5] Installing Python dependencies..."
 pip install -r requirements.txt
 echo "Dependencies installed."
 
 # 2. Fetch Osquery Specifications
-echo "[2/4] Fetching osquery specifications..."
+echo "[2/5] Fetching osquery specifications..."
 if [ -d "osquery_data" ]; then
     echo "'osquery_data' directory already exists. Skipping clone."
 else
@@ -23,12 +23,17 @@ else
 fi
 
 # 3. Download Embedding Model
-echo "[3/4] Downloading embedding model (embeddinggemma-300m)..."
+echo "[3/5] Downloading embedding model (embeddinggemma-300m)..."
 python3 -c "from huggingface_hub import hf_hub_download; import os; os.makedirs('models/unsloth/embeddinggemma-300m-GGUF', exist_ok=True); hf_hub_download(repo_id='unsloth/embeddinggemma-300m-GGUF', filename='embeddinggemma-300M-Q8_0.gguf', local_dir='models/unsloth/embeddinggemma-300m-GGUF')"
-echo "Model downloaded."
+echo "Embedding model downloaded."
 
-# 4. Run Ingestion
-echo "[4/4] Building knowledge base (this may take a moment)..."
+# 4. Pull LLM
+echo "[4/5] Pulling LLM (qwen2.5)..."
+ollama pull qwen2.5
+echo "LLM pulled."
+
+# 5. Run Ingestion
+echo "[5/5] Building knowledge base (this may take a moment)..."
 python3 ingest_osquery.py
 echo "Knowledge base built."
 
