@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-dotenv
+huggingface_hub
+sqlite-rag
+osquery
+litellm
+google-genai
+# Note: Ensure the correct package for google.adk is installed.
+# It might be a preview package or require a specific install source.
+google-adk

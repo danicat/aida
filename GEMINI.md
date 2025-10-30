@@ -1,0 +1,58 @@
+# AIDA - AI Diagnostic Agent
+
+## Overview
+AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osquery` to inspect system state and uses a local RAG (Retrieval-Augmented Generation) system to understand osquery's extensive schema. The agent can be interacted with via a web interface or used programmatically.
+
+## Architecture
+*   **Agent Framework**: Built using `google.adk`.
+*   **LLM**: Uses a local **Gemma 3 27B** model hosted via **Ollama** (`ollama_chat/gemma3:27b`).
+*   **RAG System**: A purely local implementation using **SQLite**.
+    *   Uses `sqlite-vec` for vector search.
+    *   Uses `sqlite-ai` with the `embeddinggemma-300m` GGUF model for in-database embedding generation.
+    *   Data source: Official `osquery` `.table` specification files.
+*   **Web Interface**: A **FastAPI** application serving a simple HTML/JS chat UI.
+
+## Key Files
+*   **`setup.sh`**: Automates the entire environment setup (dependencies, data fetching, model download, ingestion).
+*   **`cleanup.sh`**: Removes generated data, models, and the database to reset the environment.
+*   **`main.py`**: The FastAPI entry point. Sets up the web server, static assets, and the chat endpoint.
+*   **`aida/agent.py`**: Defines the `root_agent`, its persona, and tools (`run_osquery`, `schema_discovery`).
+*   **`aida/osquery_rag.py`**: Implements the RAG logic using standard Python `sqlite3` with manually loaded extensions.
+*   **`ingest_osquery.py`**: Script to parse osquery `.table` files, generate embeddings, and populate `osquery.db`.
+*   **`osquery.db`**: The SQLite database containing the ingested schema data and vectors.
+
+## Setup & Running
+
+### Prerequisites
+*   Python 3.12+
+*   **Ollama** running locally with `gemma3:27b` pulled.
+*   `osquery` installed on the host system.
+
+### Automated Setup
+Run the included script to prepare the environment:
+```bash
+./setup.sh
+```
+This script will:
+1.  Install Python dependencies from `requirements.txt`.
+2.  Clone the `osquery` repository (sparse checkout of `specs`).
+3.  Download the `embeddinggemma-300m` model.
+4.  Run `ingest_osquery.py` to build the knowledge base.
+
+### Running the Agent
+Start the web interface:
+```bash
+uvicorn main:app --reload
+```
+Access the UI at `http://127.0.0.1:8000`.
+
+### Cleanup
+To reset the project to its initial state:
+```bash
+./cleanup.sh
+```
+
+## Development Conventions
+*   **Tool Use**: The agent uses a manual tool invocation pattern (wrapping calls in ` ```tool_code ``` ` blocks) as defined in `aida/agent.py`.
+*   **Database**: Uses standard Python `sqlite3`. Extensions (`sqlite-vec`, `sqlite-ai`) are loaded manually into the connection.
+*   **Local-First**: All components are local. Avoid adding external API dependencies.
