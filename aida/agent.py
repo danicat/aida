@@ -33,6 +33,7 @@ def run_osquery(query: str) -> str:
 
 PACKS = get_loaded_packs()
 
+
 def schema_discovery(search_phrase: str) -> str:
     """Discovers osquery table names and schemas based on a descriptive search phrase.
 
@@ -56,7 +57,7 @@ def search_queries(search_phrase: str, target_platform: str = None) -> str:
 
     Args:
       search_phrase: Keywords describing the query you need (e.g., "persistence", "socket", "process").
-      target_platform: Optional. Filter by OS (e.g., 'darwin', 'linux', 'windows'). 
+      target_platform: Optional. Filter by OS (e.g., 'darwin', 'linux', 'windows').
                        If omitted, searches all platforms.
 
     Returns:

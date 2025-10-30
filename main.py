@@ -18,12 +18,11 @@ load_dotenv()
 # --- End Agent Definition ---
 
 # --- Services and Runner Setup ---
-APP_NAME="aida"
+APP_NAME = "aida"
 
 session_service = InMemorySessionService()
-runner = Runner(
-    app_name=APP_NAME, agent=root_agent, session_service=session_service
-)
+runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,24 +35,30 @@ async def lifespan(app: FastAPI):
     yield
     print("--- AIDA SHUTDOWN SEQUENCE ---")
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 # --- Static assets ---
 @app.get("/idle")
 async def idle():
     return FileResponse("assets/idle.png")
 
+
 @app.get("/blink")
 async def blink():
     return FileResponse("assets/blink.png")
+
 
 @app.get("/talk")
 async def talk():
     return FileResponse("assets/talk.png")
 
+
 @app.get("/think")
 async def think():
     return FileResponse("assets/think.png")
+
 
 @app.get("/random_image")
 async def random_image():
@@ -402,9 +407,13 @@ async def chat_handler(request: Request):
     session_id = "web_session"
 
     # Ensure a session exists
-    session = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+    session = await session_service.get_session(
+        app_name=APP_NAME, user_id=user_id, session_id=session_id
+    )
     if not session:
-        session = await session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+        session = await session_service.create_session(
+            app_name=APP_NAME, user_id=user_id, session_id=session_id
+        )
 
     async def stream_generator():
         """Streams JSON-formatted events for logs and text."""
@@ -418,24 +427,25 @@ async def chat_handler(request: Request):
             if event.content and event.content.parts:
                 for part in event.content.parts:
                     # Check for function calls (standard Gemini/Gemma structure)
-                    if hasattr(part, 'function_call') and part.function_call:
+                    if hasattr(part, "function_call") and part.function_call:
                         fc = part.function_call
                         # Format args nicely
                         args_str = ", ".join(f"{k}='{v}'" for k, v in fc.args.items())
                         log_msg = f"EXECUTING: {fc.name}({args_str})"
                         yield json.dumps({"type": "log", "content": log_msg}) + "\n"
-            
+
             # Capture final text response
             if event.is_final_response() and event.content and event.content.parts:
-                 for part in event.content.parts:
-                     if hasattr(part, 'text') and part.text:
+                for part in event.content.parts:
+                    if hasattr(part, "text") and part.text:
                         new_text = part.text
-                        chunk = new_text[len(full_response):]
+                        chunk = new_text[len(full_response) :]
                         if chunk:
                             yield json.dumps({"type": "text", "content": chunk}) + "\n"
                             full_response = new_text
 
     return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+
 
 # To run this file:
 # 1. Make sure you have fastapi and uvicorn installed: pip install fastapi uvicorn
