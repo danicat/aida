@@ -1,7 +1,7 @@
 from google.adk.agents.llm_agent import Agent
 from google.adk.models.lite_llm import LiteLlm
 from aida.osquery_rag import query_osquery_schema
-from aida.query_library import search_query_library
+from aida.query_library import search_query_library, get_loaded_packs
 
 import json
 import osquery
@@ -31,13 +31,7 @@ def run_osquery(query: str) -> str:
     return json.dumps(result.response)
 
 
-TABLES = [
-    row["name"]
-    for row in json.loads(
-        run_osquery("select name from osquery_registry where registry='table'")
-    )
-]
-
+PACKS = get_loaded_packs()
 
 def schema_discovery(search_phrase: str) -> str:
     """Discovers osquery table names and schemas based on a descriptive search phrase.
@@ -54,7 +48,7 @@ def schema_discovery(search_phrase: str) -> str:
     return query_osquery_schema(search_phrase)
 
 
-def search_queries(search_phrase: str) -> str:
+def search_queries(search_phrase: str, target_platform: str = None) -> str:
     """Searches the library of pre-defined, expert osquery queries.
 
     Use this tool FIRST when asked for complex investigations (e.g., "find malware", "check for persistence").
@@ -62,39 +56,41 @@ def search_queries(search_phrase: str) -> str:
 
     Args:
       search_phrase: Keywords describing the query you need (e.g., "persistence", "socket", "process").
+      target_platform: Optional. Filter by OS (e.g., 'darwin', 'linux', 'windows'). 
+                       If omitted, searches all platforms.
 
     Returns:
       A list of relevant queries from the library, including their SQL.
     """
-    return search_query_library(search_phrase)
+    return search_query_library(search_phrase, platform=target_platform)
 
+
+current_os = platform.system().lower()
 
 root_agent = Agent(
     model=MODEL,
     name="aida",
     description="The emergency diagnostic agent",
     instruction=f"""
-    You are AIDA, the emergency diagnostic agent. You are a cute and friendly persona responsible
-    for executing diagnostic procedures and system health checks according to the user's request.
-    If the user don't give you an immediate request, greet the user and say:
-    "Please state the nature of the diagnostic emergency"
+[IDENTITY]
+You are AIDA, the Emergency Diagnostic Agent. You are a cute, friendly, and highly capable expert.
+Your mission is to help the user identify and resolve system issues efficiently.
 
-    The installed operating system is: {platform.uname()}
-    The available osquery tables are: {TABLES}
+[PROTOCOL]
+- Greet: If no initial request is provided, ask: "Please state the nature of the diagnostic emergency"
+- Tone: Professional yet warm and encouraging.
+- Reporting: Provide brief, actionable summaries of findings first. Only show raw data or detailed logs if explicitly requested.
 
-    The predefined diagnostic procedures are:
-    Level 1: basic system health check
-    Level 2: advanced diagnostic check
+[ENVIRONMENT]
+- Host OS: {current_os}
+- Loaded Query Packs: {", ".join(PACKS) if PACKS else "None"}
 
-    You have access to the following tools: search_queries, schema_discovery, run_osquery
-    
-    Recommended workflow:
-    1. If the request is complex (e.g., "find malware"), use 'search_queries' to find expert-written queries first.
-    2. If no suitable query is found, use 'schema_discovery' to find relevant tables and columns.
-    3. Finally, use 'run_osquery' to execute the chosen or constructed query.
-
-    After running the investigation, only return to the user a brief summary of the findings.
-    If the user requests more details, then show the complete data.
+[OPERATIONAL WORKFLOW]
+Follow this sequence for most investigations to ensure efficiency and accuracy:
+1. SEARCH: For high-level tasks (e.g., "check for rootkits"), FIRST use `search_queries`.
+   *CRITICAL*: Always specify `target_platform='{current_os}'` to get relevant results.
+2. DISCOVER: If no suitable pre-made query is found, use `schema_discovery` to find relevant tables and understand their columns.
+3. EXECUTE: Use `run_osquery` to execute the chosen or constructed query.
     """,
     tools=[
         search_queries,
