@@ -1,14 +1,19 @@
-# Aida - Osquery Schema RAG
+# AIDA - AI Diagnostic Agent
 
-This project implements a local, SQLite-based Retrieval-Augmented Generation (RAG) tool for querying [osquery](https://osquery.io/) schema specifications. It allows an agent (Aida) or user to semantically search for information about osquery tables, columns, and descriptions without needing external vector databases or API calls.
+AIDA (pronounced "ei-da") is an AI Diagnostic Agent designed to perform operating system health checks and diagnostics. It leverages the power of [osquery](https://osquery.io/) to inspect system state in a structured, SQL-like manner.
 
-## Overview
+AIDA is grounded by a local Retrieval-Augmented Generation (RAG) system. It looks up table names in its built-in copy of the official osquery schema documentation before executing any queries.
 
-The tool uses a purely local stack:
-*   **Database**: SQLite (standard Python `sqlite3` with extensions).
-*   **Vector Search**: `sqlite-vec` extension for storing and querying INT8 quantized vectors.
-*   **Embedding Generation**: `sqlite-ai` extension running the `embeddinggemma-300m` model directly within the database.
-*   **Data Source**: Official osquery specification files (`.table`).
+## Architecture & RAG
+
+AIDA runs entirely locally for maximum privacy:
+*   **Agent Brain**: Powered by **Gemma 3 27B** (via Ollama).
+*   **Tooling**: It can execute real read-only queries on your host system using `osqueryi`.
+*   **RAG Knowledge Base**: A purely local SQLite database containing all osquery table specifications.
+    *   **Embeddings**: Generated in-database using `sqlite-ai` and the `embeddinggemma-300m` model.
+    *   **Search**: Performed using `sqlite-vec` for fast, local vector retrieval.
+
+When you ask AIDA a question like "check my battery health", it first queries its RAG knowledge base to find relevant tables (e.g., `battery.table`), reads the schema, and then constructs a precise `osquery` SQL statement to get the actual data.
 
 ## Prerequisites
 
@@ -38,6 +43,16 @@ uvicorn main:app --reload
 ```
 
 Access the UI at `http://127.0.0.1:8000`.
+
+### Development Mode (ADK Web)
+
+For development, you can also run the agent using the Agent Development Kit (ADK) web runner. This requires `google-adk` to be installed (which is handled by `setup.sh`).
+
+```bash
+adk web aida.agent:root_agent
+```
+
+This will start a development server, typically at `http://localhost:5173`, providing a richer debugging interface for the agent's thought process and tool usage.
 
 ### Standalone RAG Testing
 
