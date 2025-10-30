@@ -1,6 +1,7 @@
 import os
 import random
 import json
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from google.adk.runners import Runner
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 
 # --- Agent Definition ---
 from aida.agent import root_agent
+from aida.osquery_rag import rag_engine
 
 load_dotenv()
 # --- End Agent Definition ---
@@ -22,7 +24,19 @@ session_service = InMemorySessionService()
 runner = Runner(
     app_name=APP_NAME, agent=root_agent, session_service=session_service
 )
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handles startup and shutdown events."""
+    print("--- AIDA STARTUP SEQUENCE INITIATED ---")
+    print("Initializing RAG Engine (loading 300M parameter model)...")
+    # This might take a few seconds
+    rag_engine.initialize()
+    print("RAG Engine initialized successfully.")
+    yield
+    print("--- AIDA SHUTDOWN SEQUENCE ---")
+
+app = FastAPI(lifespan=lifespan)
 
 # --- Static assets ---
 @app.get("/idle")

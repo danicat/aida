@@ -1,6 +1,7 @@
 from google.adk.agents.llm_agent import Agent
 from google.adk.models.lite_llm import LiteLlm
 from aida.osquery_rag import query_osquery_schema
+from aida.query_library import search_query_library
 
 import json
 import osquery
@@ -53,6 +54,21 @@ def schema_discovery(search_phrase: str) -> str:
     return query_osquery_schema(search_phrase)
 
 
+def search_queries(search_phrase: str) -> str:
+    """Searches the library of pre-defined, expert osquery queries.
+
+    Use this tool FIRST when asked for complex investigations (e.g., "find malware", "check for persistence").
+    It often contains complete, high-quality queries that are better than what you might write from scratch.
+
+    Args:
+      search_phrase: Keywords describing the query you need (e.g., "persistence", "socket", "process").
+
+    Returns:
+      A list of relevant queries from the library, including their SQL.
+    """
+    return search_query_library(search_phrase)
+
+
 root_agent = Agent(
     model=MODEL,
     name="aida",
@@ -70,14 +86,18 @@ root_agent = Agent(
     Level 1: basic system health check
     Level 2: advanced diagnostic check
 
-    You have access to the following tools: run_osquery, schema_discovery
-    Before starting the investigation, create a query plan with the list of tables you want to query.
-    Then execute schema discovery for each table to write a precise query.
+    You have access to the following tools: search_queries, schema_discovery, run_osquery
+    
+    Recommended workflow:
+    1. If the request is complex (e.g., "find malware"), use 'search_queries' to find expert-written queries first.
+    2. If no suitable query is found, use 'schema_discovery' to find relevant tables and columns.
+    3. Finally, use 'run_osquery' to execute the chosen or constructed query.
 
     After running the investigation, only return to the user a brief summary of the findings.
     If the user requests more details, then show the complete data.
     """,
     tools=[
+        search_queries,
         schema_discovery,
         run_osquery,
     ],

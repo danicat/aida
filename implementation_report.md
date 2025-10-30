@@ -91,3 +91,25 @@ The agent was updated to use the `gemma-3-27b-it` model, leveraging its improved
 
 *   **Model Update:** Switched from `LiteLlm` (using `ollama_chat/gpt-oss`) to `Gemma` (using `gemma-3-27b-it`) in `aida/agent.py`.
 *   **Function Calling:** Verified that the `google.adk` library's `Gemma` class correctly implements function calling as per the [Gemma documentation](https://ai.google.dev/gemma/docs/capabilities/function-calling). This allows the agent to natively invoke tools like `run_osquery` and `schema_discovery`.
+
+## 10. Performance & Capability Upgrades (2025-10-30)
+Addressed critical performance bottlenecks and expanded the agent's knowledge base.
+
+*   **Persistent RAG Engine:**
+    *   **Problem:** The RAG system was re-initializing the 300M parameter embedding model on every query, causing multi-second latency.
+    *   **Solution:** Refactored `aida/osquery_rag.py` to use a singleton `RAGEngine` class.
+    *   **Implementation:** Integrated with FastAPI's lifespan events in `main.py` to initialize the engine once during application startup. Subsequent queries now reuse the loaded model, resulting in near-instant RAG lookups.
+
+*   **Query Library & Pack Ingestion:**
+    *   **Problem:** The agent was limited to writing queries from scratch based on schema, missing out on expert knowledge contained in standard osquery packs.
+    *   **Solution:** Implemented a system to ingest standard osquery query packs (e.g., `incident-response`, `osx-attacks`) into the database.
+    *   **Implementation:**
+        *   Updated `setup.sh` to fetch the full `packs` directory from the osquery repository.
+        *   Created `ingest_packs.py` to parse `.conf` pack files (handling non-standard JSON formatting issues common in these files) and insert them into a new `query_library` table in `osquery.db`.
+        *   Created a dedicated FTS5 index (`query_library_fts`) for efficient full-text search.
+        *   Generated vector embeddings for all queries and stored them in `query_embeddings` table (standard BLOB storage) for future hybrid search capabilities. Currently, the `search_queries` tool uses FTS5 with OR-based matching for robust recall.
+
+## 11. Resolved Challenges with Vector Search for Query Library (2025-10-30)
+*   **Issue:** `vector_quantize_scan` failed with "unable to retrieve context".
+*   **Root Cause:** `sqlite-vec` requires `vector_init` to be called for *each* connection that intends to use quantization functions on a table, likely to register in-memory metadata.
+*   **Resolution:** Updated `RAGEngine.initialize` to explicitly call `vector_init` for both `chunks` and `query_embeddings` tables on the persistent connection. This successfully enabled vector search for both schema and query library.
