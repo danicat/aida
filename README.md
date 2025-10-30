@@ -4,8 +4,7 @@ AIDA (pronounced "ei-da") is an AI Diagnostic Agent designed to perform operatin
 
 AIDA is grounded by a local Retrieval-Augmented Generation (RAG) system. It looks up table names in its built-in copy of the official osquery schema documentation before executing any queries.
 
-<video src="assets/demo.webm" controls="controls" style="max-width: 100%;">
-</video>
+![AIDA Interface](assets/aida_v2.png)
 
 ## Architecture & RAG
 
