@@ -107,9 +107,10 @@ Addressed critical performance bottlenecks and expanded the agent's knowledge ba
         *   Updated `setup.sh` to fetch the full `packs` directory from the osquery repository.
         *   Created `ingest_packs.py` to parse `.conf` pack files (handling non-standard JSON formatting issues common in these files) and insert them into a new `query_library` table in `osquery.db`.
         *   Created a dedicated FTS5 index (`query_library_fts`) for efficient full-text search.
-        *   Generated vector embeddings for all queries and stored them in `query_embeddings` table (standard BLOB storage) for future hybrid search capabilities. Currently, the `search_queries` tool uses FTS5 with OR-based matching for robust recall.
+        *   Generated vector embeddings for all queries and stored them in `query_embeddings` table (standard BLOB storage).
+        *   Added a new tool `search_queries` to the agent, utilizing **vector search** (via `sqlite-vec`) to find semantically relevant queries, with optional platform filtering.
 
 ## 11. Resolved Challenges with Vector Search for Query Library (2025-10-30)
-*   **Issue:** `vector_quantize_scan` failed with "unable to retrieve context".
-*   **Root Cause:** `sqlite-vec` requires `vector_init` to be called for *each* connection that intends to use quantization functions on a table, likely to register in-memory metadata.
-*   **Resolution:** Updated `RAGEngine.initialize` to explicitly call `vector_init` for both `chunks` and `query_embeddings` tables on the persistent connection. This successfully enabled vector search for both schema and query library.
+*   **Issue:** `vector_quantize_scan` failed with "unable to retrieve context" during runtime, despite successful ingestion.
+*   **Root Cause:** The `sqlite-vec` extension appears to require `vector_init` to be called for *each* connection that intends to use quantization-aware functions on a table, likely to register in-memory metadata for that connection's context.
+*   **Resolution:** Updated `RAGEngine.initialize` to explicitly call `vector_init` for both `chunks` (schema) and `query_embeddings` (library) tables on the persistent application connection. This successfully enabled robust vector search for both use cases.
