@@ -44,30 +44,36 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # --- Static assets ---
-# Keep these for now as they are used by the JS, 
-# but could also be moved to static/assets if desired later.
 @app.get("/idle")
-async def idle():
-    return FileResponse("assets/idle.png")
-
+async def idle(): return FileResponse("assets/idle.png")
 
 @app.get("/blink")
-async def blink():
-    return FileResponse("assets/blink.png")
-
+async def blink(): return FileResponse("assets/blink.png")
 
 @app.get("/talk")
-async def talk():
-    return FileResponse("assets/talk.png")
-
+async def talk(): return FileResponse("assets/talk.png")
 
 @app.get("/think")
-async def think():
-    return FileResponse("assets/think.png")
+async def think(): return FileResponse("assets/think.png")
 
 @app.get("/think_blink")
-async def think_blink():
-    return FileResponse("assets/think_blink.png")
+async def think_blink(): return FileResponse("assets/think_blink.png")
+
+# --- White background assets ---
+@app.get("/idle_white")
+async def idle_white(): return FileResponse("assets/idle_white.png")
+
+@app.get("/blink_white")
+async def blink_white(): return FileResponse("assets/blink_white.png")
+
+@app.get("/talk_white")
+async def talk_white(): return FileResponse("assets/talk_white.png")
+
+@app.get("/think_white")
+async def think_white(): return FileResponse("assets/think_white.png")
+
+@app.get("/think_blink_white")
+async def think_blink_white(): return FileResponse("assets/think_blink_white.png")
 
 
 @app.get("/random_image")
