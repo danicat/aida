@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emergency Diagnostic Agent</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="main-container">
+        <div id="left-panel">
+            <div id="chat-container">
+                <div id="header">*** EMERGENCY DIAGNOSTIC AGENT ***</div>
+                <div id="messages"></div>
+                <form id="user-input" onsubmit="sendMessage(event)">
+                    <span id="prompt-symbol">AIDA&gt;</span>
+                    <input type="text" id="message-text" autocomplete="off" autofocus />
+                </form>
+            </div>
+        </div>
+        <div id="right-panel">
+            <div id="avatar-window">
+                <img src="/idle" alt="Agent Avatar" id="avatar-img">
+            </div>
+            <div id="avatar-label">STATUS: ONLINE</div>
+            <div id="system-log-window">
+                <div id="system-log"></div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
