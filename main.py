@@ -59,6 +59,10 @@ async def talk():
 async def think():
     return FileResponse("assets/think.png")
 
+@app.get("/think_blink")
+async def think_blink():
+    return FileResponse("assets/think_blink.png")
+
 
 @app.get("/random_image")
 async def random_image():
@@ -71,13 +75,14 @@ async def random_image():
 @app.get("/", response_class=HTMLResponse)
 async def get_chat_ui():
     """Serves the simple HTML chat interface."""
-    return r"""
+    return r'''
     <!DOCTYPE html>
     <html>
     <head>
         <title>Emergency Diagnostic Agent</title>
         <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
         <style>
+            * { box-sizing: border-box; }
             :root {
                 --pc98-bg: #000022;
                 --pc98-fg: #d4d4d4;
@@ -111,7 +116,7 @@ async def get_chat_ui():
                 flex-direction: column;
             }
             #right-panel {
-                width: 240px;
+                width: 300px;
                 display: flex;
                 flex-direction: column;
                 gap: 15px;
@@ -166,8 +171,8 @@ async def get_chat_ui():
             .agent-message { color: var(--pc98-green); margin-bottom: 8px; white-space: pre-wrap; }
             
             #avatar-window {
-                width: 240px;
-                height: 240px;
+                width: 100%;
+                height: 300px;
                 border: 4px ridge var(--pc98-border);
                 background-color: #000011;
                 display: flex;
@@ -181,6 +186,7 @@ async def get_chat_ui():
             }
             
             #avatar-label {
+                width: 100%;
                 color: var(--pc98-green);
                 font-size: 24px;
                 text-align: center;
@@ -190,17 +196,24 @@ async def get_chat_ui():
                 background-color: var(--pc98-dark-gray);
             }
             #system-log-window {
+                width: 100%;
                 flex-grow: 1;
                 border: 4px double var(--pc98-border);
                 background-color: #000011;
                 padding: 10px;
                 font-size: 16px;
                 overflow-y: auto;
+                overflow-x: hidden;
                 height: 200px;
                 scrollbar-width: thin;
                 scrollbar-color: var(--pc98-border) #000011;
+                overflow-wrap: anywhere;
             }
-            .log-entry { margin-bottom: 4px; line-height: 1.2; }
+            .log-entry { 
+                margin-bottom: 4px; 
+                line-height: 1.2;
+                white-space: pre-wrap;
+            }
             .log-time { color: var(--pc98-cyan); margin-right: 5px; }
             .log-sys { color: var(--pc98-amber); }
         </style>
@@ -305,6 +318,16 @@ async def get_chat_ui():
                 avatarLabel.style.color = "var(--pc98-cyan)";
                 logActivity("AGENT STATUS: THINKING...");
 
+                // Thinking animation
+                let thinkBlinkInterval = setInterval(() => {
+                     avatarImg.src = '/think_blink';
+                     setTimeout(() => {
+                         if (avatarLabel.textContent === "STATUS: THINKING") {
+                             avatarImg.src = '/think';
+                         }
+                     }, 300);
+                }, 3500);
+
                 try {
                     // Stream agent response
                     const response = await fetch('/chat', {
@@ -322,11 +345,12 @@ async def get_chat_ui():
 
                     function startTalkingAnimation() {
                         if (animationInterval) return;
+                        clearInterval(thinkBlinkInterval); // Stop thinking animation
                         let toggle = false;
                         avatarImg.src = '/talk';
                         avatarLabel.textContent = "STATUS: RESPONDING";
                         avatarLabel.style.color = "var(--pc98-green)";
-                        // logActivity("AGENT STATUS: RESPONDING..."); // Logged via stream now hopefully
+                        // logActivity("AGENT STATUS: RESPONDING..."); 
                         animationInterval = setInterval(() => {
                             toggle = !toggle;
                             avatarImg.src = toggle ? '/talk' : '/idle';
@@ -334,6 +358,7 @@ async def get_chat_ui():
                     }
 
                     function stopAnimation() {
+                        clearInterval(thinkBlinkInterval); // Ensure stopped
                         if (animationInterval) {
                             clearInterval(animationInterval);
                             animationInterval = null;
@@ -383,6 +408,7 @@ async def get_chat_ui():
                     })();
 
                 } catch (e) {
+                    clearInterval(thinkBlinkInterval); // Stop thinking animation on error
                     avatarImg.src = '/idle';
                     avatarLabel.textContent = "STATUS: ERROR";
                     avatarLabel.style.color = "red";
@@ -394,7 +420,7 @@ async def get_chat_ui():
         </script>
     </body>
     </html>
-    """
+    '''
 
 
 # --- API Endpoint for Chat Logic ---

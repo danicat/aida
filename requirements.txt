@@ -3,7 +3,6 @@ uvicorn
 python-dotenv
 huggingface_hub
 sqlite-rag
-osquery
 litellm
 google-genai
 # Note: Ensure the correct package for google.adk is installed.

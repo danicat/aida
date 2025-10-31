@@ -8,3 +8,4 @@ models/
 osquery.db
 *.log
 .DS_Store
+.coverage
