@@ -59,22 +59,6 @@ async def think(): return FileResponse("assets/think.png")
 @app.get("/think_blink")
 async def think_blink(): return FileResponse("assets/think_blink.png")
 
-# --- White background assets ---
-@app.get("/idle_white")
-async def idle_white(): return FileResponse("assets/idle_white.png")
-
-@app.get("/blink_white")
-async def blink_white(): return FileResponse("assets/blink_white.png")
-
-@app.get("/talk_white")
-async def talk_white(): return FileResponse("assets/talk_white.png")
-
-@app.get("/think_white")
-async def think_white(): return FileResponse("assets/think_white.png")
-
-@app.get("/think_blink_white")
-async def think_blink_white(): return FileResponse("assets/think_blink_white.png")
-
 
 @app.get("/random_image")
 async def random_image():
