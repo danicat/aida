@@ -59,6 +59,9 @@ async def think(): return FileResponse("assets/think.png")
 @app.get("/think_blink")
 async def think_blink(): return FileResponse("assets/think_blink.png")
 
+@app.get("/teehee")
+async def teehee(): return FileResponse("assets/teehee.png")
+
 
 @app.get("/random_image")
 async def random_image():
