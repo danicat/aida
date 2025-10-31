@@ -9,3 +9,4 @@ osquery.db
 *.log
 .DS_Store
 .coverage
+nanobanana-output/
