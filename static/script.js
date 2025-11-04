@@ -4,6 +4,8 @@ const avatarImg = document.getElementById('avatar-img');
 const avatarLabel = document.getElementById('avatar-label');
 const systemLog = document.getElementById('system-log');
 const logWindow = document.getElementById('system-log-window');
+const contextLabel = document.getElementById('context-label');
+const contextBar = document.getElementById('context-bar');
 
 function logActivity(message, type = 'info') {
     const now = new Date();
@@ -15,12 +17,55 @@ function logActivity(message, type = 'info') {
     logWindow.scrollTop = logWindow.scrollHeight;
 }
 
-// Boot sequence simulation
-setTimeout(() => logActivity("SYSTEM STARTUP..."), 500);
-setTimeout(() => logActivity("LOADING KERNEL..."), 1200);
-setTimeout(() => logActivity("CONNECTING TO OSQUERY DAEMON..."), 2000);
-setTimeout(() => logActivity("RAG DATABASE LOADED (283 tables)."), 2800);
-setTimeout(() => logActivity("AIDA AGENT READY."), 3500);
+async function updateContextMeter() {
+    try {
+        const response = await fetch('/session/usage');
+        const data = await response.json();
+        // data has prompt_tokens, completion_tokens, total_tokens, max_tokens
+        const total = data.total_tokens || 0;
+        const max = data.max_tokens || 1000000;
+        const percentage = Math.min(100, (total / max) * 100).toFixed(1);
+        
+        contextLabel.textContent = `MEMORY USAGE: ${percentage}% (${total.toLocaleString()} / ${(max/1000).toFixed(0)}k)`;
+        contextBar.style.width = `${percentage}%`;
+        
+        // Color coding based on usage
+        if (percentage > 90) {
+            contextBar.style.backgroundColor = 'var(--pc98-red)';
+        } else if (percentage > 70) {
+            contextBar.style.backgroundColor = 'var(--pc98-amber)';
+        } else {
+            contextBar.style.backgroundColor = 'var(--pc98-green)';
+        }
+    } catch (e) {
+        console.error("Failed to update context meter:", e);
+    }
+}
+
+// Boot sequence: Fetch real logs from server
+async function bootSequence() {
+    try {
+        const response = await fetch('/boot_logs');
+        const data = await response.json();
+        if (data.logs && Array.isArray(data.logs)) {
+            let delay = 500;
+            for (const log of data.logs) {
+                setTimeout(() => logActivity(log), delay);
+                delay += (Math.random() * 800) + 400; // Random delay between 400ms and 1200ms
+            }
+            // Final ready state after all logs
+            setTimeout(() => {
+                updateContextMeter(); // Initial check
+            }, delay + 500);
+        }
+    } catch (e) {
+        logActivity("ERROR: FAILED TO FETCH BOOT LOGS", "error");
+        logActivity("AIDA AGENT READY (FALLBACK MODE).");
+    }
+}
+
+// Start boot sequence
+bootSequence();
 
 // Idle blinking logic
 let blinkInterval = null;
@@ -61,6 +106,56 @@ async function sendMessage(event) {
     messagesDiv.appendChild(userMsgDiv);
     messageText.value = '';
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    // Handle slash commands
+    if (query.startsWith('/model ')) {
+        const modelId = query.split(' ')[1];
+        logActivity(`COMMAND: SWITCHING MODEL TO '${modelId}'...`);
+        try {
+            const response = await fetch('/config/model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model_id: modelId })
+            });
+            const data = await response.json();
+            if (data.status === 'ok') {
+                logActivity(`SUCCESS: MODEL SWITCHED TO ${data.current_model}`);
+                const agentMsgDiv = document.createElement('div');
+                agentMsgDiv.className = 'agent-message';
+                agentMsgDiv.textContent = `[SYSTEM] Model switched successfully.`;
+                messagesDiv.appendChild(agentMsgDiv);
+                updateContextMeter(); // Update meter as max_tokens might have changed
+            } else {
+                logActivity(`ERROR: ${data.error}`, 'error');
+                 const agentMsgDiv = document.createElement('div');
+                agentMsgDiv.className = 'agent-message';
+                agentMsgDiv.textContent = `[SYSTEM] Error: ${data.error}`;
+                messagesDiv.appendChild(agentMsgDiv);
+            }
+        } catch (e) {
+            logActivity(`ERROR: FAILED TO SWITCH MODEL`, 'error');
+        }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        return;
+    }
+
+    if (query === '/clear') {
+        logActivity("COMMAND: CLEARING SESSION MEMORY...");
+        try {
+             const response = await fetch('/session/clear', { method: 'POST' });
+             const data = await response.json();
+             logActivity(`SUCCESS: ${data.message}`);
+             const agentMsgDiv = document.createElement('div');
+             agentMsgDiv.className = 'agent-message';
+             agentMsgDiv.textContent = `[SYSTEM] Memory cleared.`;
+             messagesDiv.appendChild(agentMsgDiv);
+             updateContextMeter(); // Reset meter immediately
+        } catch (e) {
+             logActivity("ERROR: FAILED TO CLEAR SESSION", 'error');
+        }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        return;
+    }
 
     logActivity(`INPUT RECEIVED: "${query.substring(0, 20)}${query.length > 20 ? '...' : ''}"`);
 
@@ -133,6 +228,7 @@ async function sendMessage(event) {
                 const { value, done } = await reader.read();
                 if (done) {
                     stopAnimation();
+                    updateContextMeter(); // Update meter after response finishes
                     break;
                 }
                 buffer += decoder.decode(value, { stream: true });
@@ -166,11 +262,11 @@ async function sendMessage(event) {
 
     } catch (e) {
         clearInterval(thinkBlinkInterval); // Stop thinking animation on error
-        avatarImg.src = '/idle';
+        avatarImg.src = '/error';
         avatarLabel.textContent = "STATUS: ERROR";
-        avatarLabel.style.color = "red";
+        avatarLabel.style.color = "var(--pc98-red)";
         agentMsgDiv.textContent = "ERROR: CONNECTION LOST";
         logActivity("ERROR: CONNECTION LOST!", "error");
-        startBlinking();
+        // startBlinking(); // Don't blink in error state
     }
 }

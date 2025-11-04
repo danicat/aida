@@ -127,6 +127,7 @@ def main():
 
     print("Initializing RAG engine...")
     rag_engine.initialize()
+    rag_engine.create_context()
     conn = rag_engine.conn
 
     init_db(conn)

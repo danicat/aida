@@ -1,15 +1,14 @@
 from google.adk.agents.llm_agent import Agent
-from google.adk.models.lite_llm import LiteLlm
 from aida.osquery_rag import query_osquery_schema
 from aida.query_library import search_query_library, get_loaded_packs
 
-import json
 import subprocess
 import platform
 
 # Replace it with your favourite model as long as it supports tool calling
 # MODEL = LiteLlm(model="ollama_chat/qwen2.5")
 MODEL = "gemini-2.5-flash"
+
 
 def run_osquery(query: str) -> str:
     """Runs a query using osquery.
@@ -29,32 +28,32 @@ def run_osquery(query: str) -> str:
         # Run osqueryi as a one-off command with a 60s timeout.
         # --json forces JSON output format.
         result = subprocess.run(
-            ["osqueryi", "--json", query],
-            capture_output=True,
-            text=True,
-            timeout=60
+            ["osqueryi", "--json", query], capture_output=True, text=True, timeout=60
         )
-        
+
         if result.returncode != 0:
             # Return stderr as error message if it failed (e.g. syntax error)
             return f"Error running osquery: {result.stderr.strip() or 'Unknown error (exit code ' + str(result.returncode) + ')'}"
-            
+
         output = result.stdout.strip()
         # Sometimes osqueryi outputs nothing if the table is empty, instead of []
         if not output:
             return "[]"
-            
+
         return output
-        
+
     except subprocess.TimeoutExpired:
         return "Error: Query timed out after 60 seconds (table might be too slow or locked)."
     except FileNotFoundError:
-        return "Error: 'osqueryi' executable not found. Is it installed and in your PATH?"
+        return (
+            "Error: 'osqueryi' executable not found. Is it installed and in your PATH?"
+        )
     except Exception as e:
         return f"Unexpected error running osquery: {e}"
 
 
 PACKS = get_loaded_packs()
+
 
 def schema_discovery(search_phrase: str) -> str:
     """Discovers osquery table names and schemas based on a descriptive search phrase.
@@ -79,7 +78,7 @@ def search_queries(search_phrase: str, target_platform: str | None = None) -> st
 
     Args:
       search_phrase: Keywords describing the query you need (e.g., "persistence", "socket", "process").
-      target_platform: Optional. Filter by OS (e.g., 'darwin', 'linux', 'windows'). 
+      target_platform: Optional. Filter by OS (e.g., 'darwin', 'linux', 'windows').
                        If omitted, searches all platforms.
 
     Returns:

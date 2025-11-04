@@ -7,6 +7,7 @@
     --pc98-border: #5555aa;
     --pc98-dark-gray: #222244;
     --pc98-amber: #ffb700;
+    --pc98-red: #ff5555;
 }
 body { 
     font-family: 'VT323', monospace;
@@ -15,32 +16,40 @@ body {
     color: var(--pc98-fg);
     display: flex; 
     justify-content: center; 
-    align-items: flex-start;
-    padding-top: 50px;
+    align-items: center; /* Center vertically */
     height: 100vh;
     margin: 0;
+    padding: 0; /* Remove padding to allow true centering */
     background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
     background-size: 100% 2px, 3px 100%;
 }
 #main-container {
     display: flex;
     gap: 20px;
+    width: 1100px;
+    height: 700px;
+    max-width: 95vw;
+    max-height: 90vh;
 }
 #left-panel {
-    width: 600px;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0; /* Prevents flex items from overflowing */
 }
 #right-panel {
     width: 300px;
     display: flex;
     flex-direction: column;
     gap: 15px;
+    flex-shrink: 0; /* Prevent it from shrinking below 300px if window is small */
 }
 #chat-container { 
+    display: flex;
+    flex-direction: column;
     flex-grow: 1;
     border: 4px double var(--pc98-border);
-    padding: 20px; 
+    padding: 20px 20px 10px 20px; 
     background-color: var(--pc98-bg);
     box-shadow: 0 0 15px rgba(85, 85, 170, 0.3);
 }
@@ -54,7 +63,8 @@ body {
     padding-bottom: 10px;
 }
 #messages { 
-    height: 400px; 
+    flex-grow: 1;
+    min-height: 0; /* Allows shrinking below previous implicit defaults */
     overflow-y: scroll; 
     border: 2px solid var(--pc98-border);
     padding: 10px; 
@@ -111,16 +121,42 @@ body {
     padding: 5px;
     background-color: var(--pc98-dark-gray);
 }
+
+#context-meter {
+    border: 2px solid var(--pc98-border);
+    background-color: var(--pc98-dark-gray);
+    padding: 10px;
+}
+#context-label {
+    color: var(--pc98-fg);
+    font-size: 18px;
+    margin-bottom: 5px;
+    text-align: center;
+}
+#context-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: #000011;
+    border: 1px solid var(--pc98-border);
+    padding: 2px;
+}
+#context-bar {
+    width: 0%;
+    height: 100%;
+    background-color: var(--pc98-green);
+    transition: width 0.5s ease, background-color 0.5s ease;
+}
+
 #system-log-window {
     width: 100%;
     flex-grow: 1;
+    min-height: 0; /* Important for nested flex scrolling */
     border: 4px double var(--pc98-border);
     background-color: #000011;
     padding: 10px;
     font-size: 16px;
     overflow-y: auto;
     overflow-x: hidden;
-    height: 200px;
     scrollbar-width: thin;
     scrollbar-color: var(--pc98-border) #000011;
     overflow-wrap: anywhere;

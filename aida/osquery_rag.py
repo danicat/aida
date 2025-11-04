@@ -1,37 +1,15 @@
-import sqlite3
 import os
 import threading
+import sys
+from unittest.mock import MagicMock
 
-# Try to use importlib.resources for Python 3.9+
-try:
-    from importlib.resources import files
-except ImportError:
-    pass
+# Hack: Mock markitdown to bypass dependency issues on Python 3.14.
+sys.modules["markitdown"] = MagicMock()
 
-# Hardcoded paths for now, could be configured via env vars or settings
+from sqlite_rag import SQLiteRag
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_PATH = os.path.join(PROJECT_ROOT, "osquery.db")
-MODEL_PATH = os.path.join(
-    PROJECT_ROOT,
-    "models/unsloth/embeddinggemma-300m-GGUF/embeddinggemma-300M-Q8_0.gguf",
-)
-
-
-def get_extensions():
-    try:
-        ai_ext = str(files("sqliteai") / "binaries" / "cpu" / "ai.dylib")
-        vec_ext = str(files("sqlite_vector") / "binaries" / "vector.dylib")
-
-        if not os.path.exists(ai_ext):
-            raise FileNotFoundError("AI extension not found via importlib")
-
-        return ai_ext, vec_ext
-    except Exception:
-        # Fallback for when running from different contexts
-        site_packages = os.path.join(PROJECT_ROOT, ".venv/lib/python3.14/site-packages")
-        ai_ext = os.path.join(site_packages, "sqliteai/binaries/cpu/ai.dylib")
-        vec_ext = os.path.join(site_packages, "sqlite_vector/binaries/vector.dylib")
-        return ai_ext, vec_ext
 
 
 class RAGEngine:
@@ -55,74 +33,55 @@ class RAGEngine:
                 return
 
             print("Initializing RAG Engine...")
-            self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-            self.conn.enable_load_extension(True)
-            ai_ext, vec_ext = get_extensions()
-            self.conn.load_extension(ai_ext)
-            self.conn.load_extension(vec_ext)
+            # SQLiteRag.create will load settings from the DB if they exist.
+            self.rag = SQLiteRag.create(DB_PATH, require_existing=True)
 
-            cursor = self.conn.cursor()
-
-            # Ensure vector_init is called for this connection for ALL vector tables.
-            for table in ["chunks", "query_embeddings"]:
-                try:
-                    cursor.execute(
-                        f"SELECT vector_init('{table}', 'embedding', 'type=INT8,dimension=768');"
-                    )
-                except Exception:
-                    # print(f"Debug: vector_init for {table} result: {e}")
-                    pass
-
-            # Load model and context ONCE
-            print(f"Loading model from {MODEL_PATH}...")
-            cursor.execute("SELECT llm_model_load(?, 'n_gpu_layers=0');", (MODEL_PATH,))
-            cursor.execute(
-                "SELECT llm_context_create('n_ctx=2048,embedding_type=INT8,pooling_type=mean,generate_embedding=1,normalize_embedding=1');"
-            )
-            print("Model loaded.")
+            # Initialize vector table for query library if it exists.
+            # This is needed for every new connection that wants to use vector_quantize_scan on this table.
+            try:
+                self.rag._conn.execute(
+                    "SELECT vector_init('query_embeddings', 'embedding', 'type=INT8,dimension=768');"
+                )
+            except Exception:
+                # Ignore errors if table doesn't exist yet (e.g. before ingest_packs)
+                pass
 
             self._initialized = True
+            print("RAG Engine initialized.")
+
+    @property
+    def conn(self):
+        if not self._initialized:
+            self.initialize()
+        return self.rag._conn
+
+    def create_context(self):
+        if not self._initialized:
+            self.initialize()
+        self.rag._ensure_initialized()
+        self.rag._engine.create_new_context()
 
     def query(self, query_text: str, k: int = 5) -> str:
         if not self._initialized:
             self.initialize()
 
         try:
-            cursor = self.conn.cursor()
-
-            # Generate query embedding
-            cursor.execute("SELECT llm_embed_generate(?)", (query_text,))
-            result = cursor.fetchone()
-            if not result:
-                return "Failed to generate embedding for query."
-            query_embedding = result[0]
-
-            # Perform vector search
-            cursor.execute(
-                """
-                SELECT
-                    documents.uri,
-                    documents.content,
-                    MIN(v.distance) as distance
-                FROM vector_quantize_scan('chunks', 'embedding', ?, ?) AS v
-                JOIN chunks ON chunks.id = v.rowid
-                JOIN documents ON documents.id = chunks.document_id
-                GROUP BY documents.id
-                ORDER BY distance ASC
-            """,
-                (query_embedding, k),
-            )
-
-            results = cursor.fetchall()
+            # Get more chunks to ensure we have enough unique documents
+            results = self.rag.search(query_text, top_k=k * 2)
 
             if not results:
                 return "No relevant documentation found."
 
+            unique_docs = {}
+            for res in results:
+                if res.document.uri not in unique_docs:
+                    unique_docs[res.document.uri] = res.document.content.strip()
+                if len(unique_docs) >= k:
+                    break
+
             formatted_results = []
-            for uri, content, distance in results:
-                formatted_results.append(
-                    f"Source: {uri}\nContent:\n{content.strip()}\n"
-                )
+            for uri, content in unique_docs.items():
+                formatted_results.append(f"Source: {uri}\nContent:\n{content}\n")
 
             return "\n---\n".join(formatted_results)
 

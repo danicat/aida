@@ -2,6 +2,7 @@ import sqlite3
 import os
 from aida.osquery_rag import rag_engine
 
+
 def search_query_library(search_phrase: str, platform: str | None = None) -> str:
     """
     Searches the pre-defined query library for relevant queries using vector search,
@@ -9,16 +10,17 @@ def search_query_library(search_phrase: str, platform: str | None = None) -> str
     """
     try:
         rag_engine.initialize()
+        rag_engine.create_context()
         conn = rag_engine.conn
         cursor = conn.cursor()
-        
+
         # Generate query embedding
         cursor.execute("SELECT llm_embed_generate(?)", (search_phrase,))
         result = cursor.fetchone()
         if not result:
-             return "Failed to generate embedding for query."
+            return "Failed to generate embedding for query."
         query_embedding = result[0]
-        
+
         sql = """
             SELECT
                 ql.name, ql.pack, ql.description, ql.query, ql.platform,
@@ -29,11 +31,11 @@ def search_query_library(search_phrase: str, platform: str | None = None) -> str
         params = [query_embedding]
 
         if platform:
-            allowed_platforms = {platform.lower(), 'all'}
-            if platform.lower() in ['darwin', 'linux']:
-                allowed_platforms.add('posix')
-            
-            placeholders = ','.join(['?'] * len(allowed_platforms))
+            allowed_platforms = {platform.lower(), "all"}
+            if platform.lower() in ["darwin", "linux"]:
+                allowed_platforms.add("posix")
+
+            placeholders = ",".join(["?"] * len(allowed_platforms))
             sql += f" WHERE ql.platform IN ({placeholders})"
             params.extend(allowed_platforms)
 
@@ -41,32 +43,34 @@ def search_query_library(search_phrase: str, platform: str | None = None) -> str
 
         cursor.execute(sql, params)
         results = cursor.fetchall()
-        
+
         formatted_results = []
         for name, pack, description, query, plat, distance in results:
             # Heuristic threshold.
-            if distance > 200:
-                 continue
-            formatted_results.append(f"Name: {name} (Pack: {pack}, Platform: {plat})\nDescription: {description}\nSQL: {query}\n(Distance: {distance:.2f})\n")
-            
+            if distance > 265:
+                continue
+            formatted_results.append(
+                f"Name: {name} (Pack: {pack}, Platform: {plat})\nDescription: {description}\nSQL: {query}\n(Distance: {distance:.2f})\n"
+            )
+
         if not formatted_results:
-             plat_msg = f" for {platform}" if platform else ""
-             return f"No relevant queries found{plat_msg} matching '{search_phrase}'."
+            plat_msg = f" for {platform}" if platform else ""
+            return f"No relevant queries found{plat_msg} matching '{search_phrase}'."
 
         return "\n---\n".join(formatted_results[:5])
-        
+
     except Exception as e:
         return f"Error searching query library: {e}"
+
 
 def get_loaded_packs() -> list[str]:
     """Retrieves the names of all loaded query packs."""
     try:
         # We can use a fresh connection here as it's a simple metadata query,
         # or use rag_engine.conn if initialized, but fresh is safer if called early.
-        # Actually, DB_PATH is needed.
         PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         DB_PATH_LOCAL = os.path.join(PROJECT_ROOT, "osquery.db")
-        
+
         conn = sqlite3.connect(DB_PATH_LOCAL)
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT pack FROM query_library ORDER BY pack")
