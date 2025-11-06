@@ -8,17 +8,24 @@ sys.modules["markitdown"] = MagicMock()
 
 from sqlite_rag import SQLiteRag
 
-DB_PATH = os.path.abspath("osquery.db")
+DB_PATH = os.path.abspath("schema.db")
 SPECS_DIR = os.path.abspath("osquery_data/specs")
 
 
-def ingest():
+def ingest(rag: SQLiteRag, file_path: str):
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    rel_path = os.path.relpath(file_path, SPECS_DIR)
+    rag.add_text(content, uri=rel_path, metadata={"source": "osquery_specs"})
+
+
+if __name__ == "__main__":
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
 
     print(f"Initializing RAG database at {DB_PATH}...")
-    # Initialize with quantize_scan=False to speed up ingestion
-    rag = SQLiteRag.create(DB_PATH, settings={"quantize_scan": False})
+    rag = SQLiteRag.create(DB_PATH, settings={"quantize_scan": True})
 
     print(f"Scanning {SPECS_DIR} for .table files...")
     files_to_ingest = []
@@ -31,26 +38,14 @@ def ingest():
     print(f"Found {total_files} files to ingest.")
 
     for i, file_path in enumerate(files_to_ingest):
-        rel_path = os.path.relpath(file_path, SPECS_DIR)
-
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        rag.add_text(content, uri=rel_path, metadata={"source": "osquery_specs"})
-
+        ingest(rag, file_path)
+        
         if (i + 1) % 50 == 0:
             print(f"Ingested {i + 1}/{total_files}...")
 
     print(f"Finished ingesting {total_files} files.")
-    rag.close()
 
-    print("Updating settings and quantizing vectors...")
-    # Re-open with quantize_scan=True to store this setting for future use
-    rag = SQLiteRag.create(DB_PATH, settings={"quantize_scan": True})
+    print("Quantizing vectors...")
     rag.quantize_vectors()
     print("Quantization complete.")
     rag.close()
-
-
-if __name__ == "__main__":
-    ingest()

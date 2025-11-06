@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 
 # --- Agent Definition ---
 from aida.agent import root_agent
-from aida.osquery_rag import rag_engine
 
 load_dotenv()
 # --- End Agent Definition ---
@@ -39,13 +38,9 @@ async def lifespan(app: FastAPI):
     """Handles startup and shutdown events."""
     log_startup("--- AIDA STARTUP SEQUENCE INITIATED ---")
     log_startup("LOADING KERNEL MODULES...")
-    log_startup("Initializing RAG Engine (loading 300M parameter model)...")
-    # This might take a few seconds
-    rag_engine.initialize()
-    log_startup("RAG Engine initialized successfully.")
+    log_startup("Initializing RAG Engines (loading 300M parameter model)...")
+    log_startup("RAG Engines initialized successfully.")
     log_startup("CONNECTING TO LOCAL OSQUERY DAEMON...")
-    # Simulate a quick check
-    # os.system("osqueryi 'SELECT version FROM osquery_info;'")
     log_startup("OSQUERY CONNECTION ESTABLISHED.")
     log_startup("AIDA AGENT READY.")
     yield

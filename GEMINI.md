@@ -1,60 +1,75 @@
-# AIDA - AI Diagnostic Agent
+# AIDA Project - Gemini Agent Instructions
 
-## Overview
-AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osquery` to inspect system state and uses a local RAG (Retrieval-Augmented Generation) system to understand osquery's extensive schema. The agent can be interacted with via a web interface or used programmatically.
+This document provides specific instructions and context for AI agents (like Gemini) working on the AIDA project.
 
-## Architecture
-*   **Agent Framework**: Built using `google.adk`.
-*   **LLM**: Uses a local **Qwen 2.5** model hosted via **Ollama** (`ollama_chat/qwen2.5`), chosen for its reliable tool-calling capabilities.
-*   **RAG System**: A purely local implementation using **SQLite** via the **`sqlite-rag`** library.
-    *   **Embeddings**: Generated in-database using `sqlite-ai` and the `embeddinggemma-300m` GGUF model, managed by `sqlite-rag`.
-    *   **Search**: Hybrid search (Vector + FTS5) performed using `sqlite-rag` (leveraging `sqlite-vec` and `fts5`).
-    *   **Data Source**: Official `osquery` `.table` specification files.
-*   **Web Interface**: A **FastAPI** application serving a simple HTML/JS chat UI.
+## Project Overview
 
-## Key Files
-*   **`setup.sh`**: Automates the entire environment setup (dependencies, data fetching, model download/pull, ingestion).
-*   **`cleanup.sh`**: Removes generated data, models, and the database to reset the environment.
-*   **`main.py`**: The FastAPI entry point. Sets up the web server, static assets, and the chat endpoint.
-*   **`aida/agent.py`**: Defines the `root_agent`, its persona, and tools (`run_osquery`, `schema_discovery`).
-*   **`aida/osquery_rag.py`**: Implements the RAG logic using `sqlite-rag`.
-*   **`ingest_osquery.py`**: Script to ingest osquery `.table` files into the RAG database using `sqlite-rag`.
-*   **`osquery.db`**: The SQLite database containing the ingested schema data and vectors.
+AIDA (AI Diagnostic Agent) is a local, privacy-focused diagnostic tool that uses `osquery` and a local RAG system. It's built with Python (FastAPI, google-adk) and uses local LLMs via Ollama.
 
-## Setup & Running
+## Core Mandates for Agents
 
-### Prerequisites
-*   Python 3.12+
-*   **Ollama** running locally.
-*   `osquery` installed on the host system.
+*   **Follow Existing Conventions**: Match the coding style, naming conventions, and structure of the existing codebase.
+*   **Local-First**: Assume the environment is local. Do not introduce dependencies on cloud services unless explicitly requested.
+*   **Testing**: All new features and bug fixes must include tests.
+*   **Imports**: Use absolute imports for project modules (e.g., `from aida.schema_rag import ...`).
 
-### Automated Setup
-Run the included script to prepare the environment:
+## Development Workflow
+
+### 1. Environment Setup
+Ensure you are in the project root. The virtual environment should be active.
+
+### 2. Running Tests
+The project uses `unittest` for testing. Run all tests from the project root:
 ```bash
-./setup.sh
+python3 -m unittest discover tests
 ```
-This script will:
-1.  Install Python dependencies from `requirements.txt`.
-2.  Clone the `osquery` repository (sparse checkout of `specs`).
-3.  Download the `embeddinggemma-300m` model.
-4.  Pull the `qwen2.5` model via Ollama.
-5.  Run `ingest_osquery.py` to build the knowledge base.
+Always run tests before and after making changes to ensure no regressions.
 
-### Running the Agent
-Start the web interface:
+### 3. Code Style & Linting
+Use `ruff` for linting and formatting.
 ```bash
-uvicorn main:app --reload
-```
-Access the UI at `http://127.0.0.1:8000`.
-
-### Cleanup
-To reset the project to its initial state:
-```bash
-./cleanup.sh
+ruff check . --fix && ruff format .
 ```
 
-## Development Conventions
-*   **Tool Use**: The agent uses a manual tool invocation pattern (wrapping calls in ` ```tool_code ``` ` blocks) as defined in `aida/agent.py`.
-*   **Database**: Uses **`sqlite-rag`** for RAG operations.
-*   **Local-First**: All components are local. Avoid adding external API dependencies.
-*   **Linting**: Use `ruff check .` and `ruff format .` to maintain code quality.
+### 4. Project Structure
+*   `aida/`: Core package containing agent logic and RAG engines.
+    *   `agent.py`: Defines the main agent, tools, and persona.
+    *   `schema_rag.py`: RAG engine for osquery schema.
+    *   `queries_rag.py`: RAG engine for query packs.
+*   `tests/`: Contains `unittest` test files.
+    *   `test_aida_core.py`: Core functionality tests.
+    *   `test_query_lib.py`: Tests for the query library RAG.
+    *   `test_search.py`: Tests for schema search.
+*   `main.py`: FastAPI application entry point.
+*   `ingest_*.py`: Scripts for data ingestion.
+
+## Key Components
+
+### RAG Engines
+The project uses two RAG engines:
+*   `schema_rag`: For querying the osquery schema.
+*   `queries_rag`: For searching the query library.
+
+Both are initialized in their respective modules in `aida/`. When writing tests, import them directly:
+```python
+from aida.schema_rag import schema_rag, discover_schema
+from aida.queries_rag import queries_rag, search_query_library
+```
+
+### Agent Definition
+The main agent is defined in `aida/agent.py`. It uses `google.adk` and is configured to use local models (Ollama/Qwen) or Gemini.
+
+## Common Tasks
+
+*   **Adding a new tool**: Define the tool in `aida/agent.py` and register it with the agent. Add corresponding tests in `tests/`.
+*   **Modifying RAG logic**: Update `aida/schema_rag.py` or `aida/queries_rag.py`. Ensure you re-run ingestion scripts if the data structure changes.
+*   **Updating the UI**: Modify `templates/index.html` or `static/` files.
+*   **Updating dependencies**: Add new dependencies to `requirements.txt`.
+
+## Troubleshooting
+
+*   **Import Errors in Tests**: Ensure `sys.path` is correctly set in test files to include the project root.
+    ```python
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    ```
+*   **RAG Initialization Issues**: The RAG engines require the database files (`schema.db`, `packs.db`) to exist. Run `./setup.sh` if they are missing.
