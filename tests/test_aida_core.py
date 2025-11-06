@@ -34,7 +34,7 @@ class TestAidaCore(unittest.TestCase):
         """Verify standard RAG schema retrieval works."""
         print("\nTesting Schema Retrieval ('processes')...")
         start_time = time.time()
-        results = discover_schema("processes")
+        results = discover_schema("processes", top_k=5)
         duration = time.time() - start_time
 
         self.assertIsInstance(results, list)
@@ -46,7 +46,7 @@ class TestAidaCore(unittest.TestCase):
     def test_03_query_library_exact(self):
         """Verify query library finds exact matches."""
         print("\nTesting Query Library (exact match 'launchd'வுகளை...)")
-        results = search_query_library("launchd")
+        results = search_query_library("launchd", platform="darwin", top_k=5)
         self.assertIsInstance(results, list)
         self.assertTrue(len(results) > 0)
         self.assertIn("launchd", str(results).lower())
@@ -57,7 +57,7 @@ class TestAidaCore(unittest.TestCase):
     def test_04_query_library_fuzzy(self):
         """Verify query library finds loose matches via vector search."""
         print("\nTesting Query Library (fuzzy match 'find malware')...")
-        results = search_query_library("find malware")
+        results = search_query_library("find malware", platform="all", top_k=5)
         # Should find things with 'malware' or 'adware' even if 'find' isn't next to it
         self.assertTrue("malware" in str(results).lower() or "adware" in str(results).lower())
         print("Query library fuzzy match test passed.")
@@ -65,7 +65,7 @@ class TestAidaCore(unittest.TestCase):
     def test_05_query_library_no_results(self):
         """Verify behavior with nonsense query (currently returns closest matches)."""
         print("\nTesting Query Library (nonsense query)...")
-        results = search_query_library("definitely_not_a_real_query_term_xyz")
+        results = search_query_library("definitely_not_a_real_query_term_xyz", platform="all", top_k=5)
         # Current implementation returns results even for nonsense
         self.assertTrue(len(results) > 0)
         print("Query library nonsense query test passed (returned results as expected by current implementation).")
@@ -75,7 +75,7 @@ class TestAidaCore(unittest.TestCase):
         print("\nTesting Platform Filtering (explicit 'darwin')...")
 
         # Explicitly search for darwin, should NOT find windows stuff even if query is windows-biased
-        results = search_query_library("windows registry hives", platform="darwin")
+        results = search_query_library("windows registry hives", platform="darwin", top_k=5)
         self.assertNotIn("(Pack: windows-", str(results))
 
         print("Platform filtering test passed.")

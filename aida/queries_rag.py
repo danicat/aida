@@ -19,7 +19,7 @@ queries_rag = SQLiteRag.create(
 )
 
 
-def search_query_library(search_terms: str, platform: str = "all", top_k: int = 5) -> list[DocumentResult]:
+def search_query_library(search_terms: str, platform: str, top_k: int) -> list[DocumentResult]:
     """
     Search the query pack library to find relevant queries corresponding to the
     search terms. For better response quality, use the platform argument to

@@ -2,20 +2,22 @@
 
 AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osquery` to inspect system state and uses a sophisticated local RAG (Retrieval-Augmented Generation) system to understand osquery's extensive schema and utilize expert-written query packs.
 
-![AIDA Interface](aida_v2.png)
+![AIDA Interface](aida_v3.png)
 
 ## Key Features
 
 *   **100% Local & Private**: Runs entirely on your machine using local LLMs (via Ollama) and on-device embedding models.
+*   **Multi-Model Support**: Switch seamlessly between **Gemini 2.5 Flash**, **Qwen 2.5**, and **GPT-OSS** directly from the UI.
 *   **Osquery Expert**: Grounded in the official osquery schema and standard query packs.
 *   **Persistent RAG Engine**: High-performance, low-latency RAG using a persistent in-memory embedding model (Gemma-300M).
 *   **Query Library**: Instantly recalls hundreds of expert queries for complex tasks like malware hunting, filtered by your operating system.
 *   **Schema Discovery**: Can find and understand any of the 280+ osquery tables to construct custom queries on the fly.
+*   **Enhanced UI**: Retro-styled interface with real-time memory usage tracking, debug mode for tool inspection, markdown rendering, and session management.
 
 ## Architecture
 
 *   **Agent Framework**: Built with `google.adk`.
-*   **LLM**: **Qwen 2.5** (via Ollama) for reasoning and tool use.
+*   **LLM**: Supports **Gemini 2.5 Flash**, **Qwen 2.5**, and **GPT-OSS** (via Ollama) for reasoning and tool use.
 *   **RAG System**: Pure SQLite implementation using `sqlite-vec` (vector search) and `sqlite-ai` (in-database embeddings).
 *   **Interface**: FastAPI backend serving a retro-styled HTML/JS frontend.
 
@@ -23,7 +25,7 @@ AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osque
 
 *   Python 3.12+
 *   `git`
-*   **Ollama** running locally (`ollama serve`).
+*   **Ollama** running locally (`ollama serve`) for local models.
 *   `osquery` installed on the host system.
 
 ## Quick Start
@@ -61,3 +63,5 @@ AIDA is a local, privacy-focused emergency diagnostic agent. It leverages `osque
 *   `ingest_packs.py`: Ingests standard `.conf` query packs into `osquery.db`.
 *   `main.py`: FastAPI application and web UI.
 *   `tests/`: Unit and integration tests.
+*   `static/`: Frontend assets (CSS, JS, libraries).
+*   `templates/`: HTML templates.

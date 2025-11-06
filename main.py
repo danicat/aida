@@ -24,25 +24,11 @@ APP_NAME = "aida"
 session_service = InMemorySessionService()
 runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
 
-# Global buffer for startup logs
-startup_logs = []
-
-
-def log_startup(message: str):
-    print(message)
-    startup_logs.append(message)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handles startup and shutdown events."""
-    log_startup("--- AIDA STARTUP SEQUENCE INITIATED ---")
-    log_startup("LOADING KERNEL MODULES...")
-    log_startup("Initializing RAG Engines (loading 300M parameter model)...")
-    log_startup("RAG Engines initialized successfully.")
-    log_startup("CONNECTING TO LOCAL OSQUERY DAEMON...")
-    log_startup("OSQUERY CONNECTION ESTABLISHED.")
-    log_startup("AIDA AGENT READY.")
+    print("AIDA AGENT READY.")
     yield
     print("--- AIDA SHUTDOWN SEQUENCE ---")
 
@@ -54,11 +40,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # --- Static assets ---
-@app.get("/boot_logs")
-async def get_boot_logs():
-    return {"logs": startup_logs}
-
-
 @app.get("/idle")
 async def idle():
     return FileResponse("assets/idle.png")
@@ -109,6 +90,29 @@ async def get_chat_ui():
 
 
 # --- API Endpoint for Chat Logic ---
+@app.get("/config/model")
+async def get_model():
+    current_model = root_agent.model
+    model_id = "gemini" # Default
+    
+    print(f"DEBUG: get_model current_model type: {type(current_model)}, value: {current_model}")
+    if hasattr(current_model, "model_name"):
+         print(f"DEBUG: current_model.model_name: {current_model.model_name}")
+
+    if isinstance(current_model, str):
+        if "gemini" in current_model:
+            model_id = "gemini"
+    elif hasattr(current_model, "model_name"):
+        if "gemini" in current_model.model_name:
+             model_id = "gemini"
+        elif "qwen" in current_model.model_name:
+            model_id = "qwen"
+        elif "gpt-oss" in current_model.model_name:
+            model_id = "gpt-oss"
+            
+    return {"model_id": model_id}
+
+
 @app.post("/config/model")
 async def set_model(request: Request):
     body = await request.json()
@@ -117,15 +121,11 @@ async def set_model(request: Request):
     if model_id == "gemini":
         root_agent.model = "gemini-2.5-flash"
     elif model_id == "qwen":
-        # We need to import LiteLlm here if it wasn't imported at top level for this specific use
-        # assuming it is available based on previous context, or we use the string if registered.
-        # Based on agent.py, it was: MODEL = LiteLlm(model="ollama_chat/qwen2.5")
-        # Let's try setting the string first if ADK supports it via registry,
-        # otherwise we might need to re-instantiate LiteLlm.
-        # Looking at agent.py imports: from google.adk.models.lite_llm import LiteLlm
         root_agent.model = LiteLlm(model="ollama_chat/qwen2.5")
+    elif model_id == "gptoss" or model_id == "gpt-oss":
+        root_agent.model = LiteLlm(model="ollama_chat/gpt-oss")
     else:
-        return {"error": "Invalid model ID. Use 'gemini' or 'qwen'."}
+        return {"error": "Invalid model ID. Use 'gemini', 'qwen' or 'gpt-oss."}
 
     print(f"--- MODEL SWITCHED TO: {root_agent.model} ---")
     return {"status": "ok", "current_model": str(root_agent.model)}
@@ -148,14 +148,18 @@ async def get_session_usage():
 
     # Determine max tokens based on current model
     current_model = root_agent.model
-    if isinstance(current_model, str):
-        if "gemini-2.5-flash" in current_model:
-            usage["max_tokens"] = 1000000
+    
+    is_gemini = False
+    if isinstance(current_model, str) and "gemini" in current_model:
+        is_gemini = True
+    elif hasattr(current_model, "model_name") and "gemini" in current_model.model_name:
+        is_gemini = True
+        
+    if is_gemini:
+        usage["max_tokens"] = 1000000
     else:
-        # Assume it's LiteLlm/Ollama Qwen 2.5
-        # We can check the model_name attribute if available, or just assume it's Qwen for now
-        # since it's the only other option we support.
-        usage["max_tokens"] = 32768  # Conservative default for Qwen 2.5 via Ollama
+        # Assume it's LiteLlm/Ollama Qwen 2.5 or GPT-OSS
+        usage["max_tokens"] = 32768
 
     if session and session.events:
         # Find the last event with usage metadata
@@ -223,6 +227,17 @@ async def chat_handler(request: Request):
                         args_str = ", ".join(f"{k}='{v}'" for k, v in fc.args.items())
                         log_msg = f"EXECUTING: {fc.name}({args_str})"
                         yield json.dumps({"type": "log", "content": log_msg}) + "\n"
+                    
+                    # Check for function responses (tool output)
+                    if hasattr(part, "function_response") and part.function_response:
+                        fr = part.function_response
+                        # Extract result if possible, otherwise use whole response
+                        if isinstance(fr.response, dict) and 'result' in fr.response:
+                            output_str = str(fr.response['result'])
+                        else:
+                            output_str = str(fr.response)
+                        
+                        yield json.dumps({"type": "tool_output", "content": output_str}) + "\n"
 
             # Capture final text response
             if event.is_final_response() and event.content and event.content.parts:

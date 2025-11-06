@@ -7,6 +7,8 @@ const logWindow = document.getElementById('system-log-window');
 const contextLabel = document.getElementById('context-label');
 const contextBar = document.getElementById('context-bar');
 
+let debugMode = false;
+
 function logActivity(message, type = 'info') {
     const now = new Date();
     const timeStr = now.toTimeString().split(' ')[0];
@@ -15,6 +17,14 @@ function logActivity(message, type = 'info') {
     entry.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-sys">${message}</span>`;
     systemLog.appendChild(entry);
     logWindow.scrollTop = logWindow.scrollHeight;
+}
+
+function toggleDebug() {
+    debugMode = !debugMode;
+    const btn = document.getElementById('debug-toggle');
+    btn.textContent = `DEBUG: ${debugMode ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', debugMode);
+    logActivity(`DEBUG MODE: ${debugMode ? 'ENABLED' : 'DISABLED'}`);
 }
 
 async function updateContextMeter() {
@@ -26,13 +36,13 @@ async function updateContextMeter() {
         const max = data.max_tokens || 1000000;
         const percentage = Math.min(100, (total / max) * 100).toFixed(1);
         
-        contextLabel.textContent = `MEMORY USAGE: ${percentage}% (${total.toLocaleString()} / ${(max/1000).toFixed(0)}k)`;
+        contextLabel.textContent = `${percentage}% (${total.toLocaleString()} / ${(max/1000).toFixed(0)}k)`;
         contextBar.style.width = `${percentage}%`;
         
         // Color coding based on usage
-        if (percentage > 90) {
+        if (percentage >= 100) {
             contextBar.style.backgroundColor = 'var(--pc98-red)';
-        } else if (percentage > 70) {
+        } else if (percentage >= 80) {
             contextBar.style.backgroundColor = 'var(--pc98-amber)';
         } else {
             contextBar.style.backgroundColor = 'var(--pc98-green)';
@@ -42,26 +52,26 @@ async function updateContextMeter() {
     }
 }
 
-// Boot sequence: Fetch real logs from server
-async function bootSequence() {
+async function fetchCurrentModel() {
     try {
-        const response = await fetch('/boot_logs');
+        const response = await fetch('/config/model');
         const data = await response.json();
-        if (data.logs && Array.isArray(data.logs)) {
-            let delay = 500;
-            for (const log of data.logs) {
-                setTimeout(() => logActivity(log), delay);
-                delay += (Math.random() * 800) + 400; // Random delay between 400ms and 1200ms
+        if (data.model_id) {
+            updateActiveModelButton(data.model_id);
+            if (debugMode) {
+                logActivity(`DEBUG: Initial model set to ${data.model_id}`);
             }
-            // Final ready state after all logs
-            setTimeout(() => {
-                updateContextMeter(); // Initial check
-            }, delay + 500);
         }
     } catch (e) {
-        logActivity("ERROR: FAILED TO FETCH BOOT LOGS", "error");
-        logActivity("AIDA AGENT READY (FALLBACK MODE).");
+        console.error("Failed to fetch current model:", e);
     }
+}
+
+// Boot sequence: Immediate ready state
+async function bootSequence() {
+    logActivity("AIDA AGENT READY.");
+    updateContextMeter();
+    fetchCurrentModel();
 }
 
 // Start boot sequence
@@ -94,6 +104,58 @@ function stopBlinking() {
 // Start blinking initially
 startBlinking();
 
+function sendShortcut(command) {
+    messageText.value = command;
+    // Create a synthetic submit event
+    const event = new Event('submit', { cancelable: true });
+    const form = document.getElementById('user-input');
+    form.dispatchEvent(event);
+    // Call sendMessage directly as dispatchEvent might not trigger the onsubmit handler if attached via HTML attribute in some browsers, 
+    // but here it is attached via onsubmit attribute.
+    // Actually, let's just call sendMessage directly with a mock event.
+    sendMessage({ preventDefault: () => {} });
+}
+
+async function typeOutHTML(container, html) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    
+    async function typeNode(node, parent) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            for (const char of node.textContent) {
+                parent.append(char);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                await new Promise(r => setTimeout(r, 5)); // Faster typing
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = document.createElement(node.tagName);
+            // Copy attributes
+            for (const attr of node.attributes) {
+                el.setAttribute(attr.name, attr.value);
+            }
+            parent.appendChild(el);
+            for (const child of node.childNodes) {
+                await typeNode(child, el);
+            }
+        }
+    }
+    
+    for (const child of tempDiv.childNodes) {
+        await typeNode(child, container);
+    }
+}
+
+function updateActiveModelButton(modelId) {
+    document.querySelectorAll('#model-row button').forEach(btn => btn.classList.remove('active'));
+    if (modelId === 'gemini') {
+        document.getElementById('btn-gemini').classList.add('active');
+    } else if (modelId === 'qwen') {
+        document.getElementById('btn-qwen').classList.add('active');
+    } else if (modelId === 'gpt-oss') {
+        document.getElementById('btn-gpt').classList.add('active');
+    }
+}
+
 async function sendMessage(event) {
     event.preventDefault();
     const query = messageText.value;
@@ -120,6 +182,7 @@ async function sendMessage(event) {
             const data = await response.json();
             if (data.status === 'ok') {
                 logActivity(`SUCCESS: MODEL SWITCHED TO ${data.current_model}`);
+                updateActiveModelButton(modelId);
                 const agentMsgDiv = document.createElement('div');
                 agentMsgDiv.className = 'agent-message';
                 agentMsgDiv.textContent = `[SYSTEM] Model switched successfully.`;
@@ -145,14 +208,18 @@ async function sendMessage(event) {
              const response = await fetch('/session/clear', { method: 'POST' });
              const data = await response.json();
              logActivity(`SUCCESS: ${data.message}`);
-             const agentMsgDiv = document.createElement('div');
-             agentMsgDiv.className = 'agent-message';
-             agentMsgDiv.textContent = `[SYSTEM] Memory cleared.`;
-             messagesDiv.appendChild(agentMsgDiv);
+             messagesDiv.innerHTML = ''; // Clear chat window
              updateContextMeter(); // Reset meter immediately
         } catch (e) {
              logActivity("ERROR: FAILED TO CLEAR SESSION", 'error');
         }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        return;
+    }
+
+    if (query === '/debug') {
+        logActivity("COMMAND: TOGGLING DEBUG MODE...");
+        toggleDebug();
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
         return;
     }
@@ -224,9 +291,15 @@ async function sendMessage(event) {
 
         // Asynchronously read from the stream
         (async () => {
+            let fullMarkdown = "";
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) {
+                    // Render and type out the full response
+                    const fullHTML = DOMPurify.sanitize(marked.parse(fullMarkdown));
+                    agentMsgDiv.innerHTML = ''; // Clear loading indicator
+                    await typeOutHTML(agentMsgDiv, fullHTML);
+                    
                     stopAnimation();
                     updateContextMeter(); // Update meter after response finishes
                     break;
@@ -243,14 +316,15 @@ async function sendMessage(event) {
                             const data = JSON.parse(line);
                             if (data.type === 'log') {
                                 logActivity(data.content);
+                            } else if (data.type === 'tool_output') {
+                                if (debugMode) {
+                                    logActivity(`TOOL OUTPUT: ${data.content}`);
+                                }
                             } else if (data.type === 'text') {
                                 startTalkingAnimation();
-                                // Append text character by character for retro feel
-                                for (const char of data.content) {
-                                    agentMsgDiv.textContent += char;
-                                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                                    await new Promise(r => setTimeout(r, 10)); // Tiny delay for typing effect
-                                }
+                                fullMarkdown += data.content;
+                                // Show a simple loading indicator while accumulating
+                                agentMsgDiv.textContent = "Receiving transmission...";
                             }
                         } catch (e) {
                             console.error("Error parsing JSON line:", line, e);

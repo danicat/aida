@@ -12,7 +12,7 @@ class TestSearch(unittest.TestCase):
         """Test querying for process information table."""
         query = "What table contains process information?"
         print(f"\nSearching for: '{query}'...")
-        results = discover_schema(query)
+        results = discover_schema(query, top_k=5)
         print(results)
         self.assertIsInstance(results, list)
         self.assertTrue(len(results) > 0)

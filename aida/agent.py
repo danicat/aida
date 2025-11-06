@@ -70,12 +70,13 @@ Your mission is to help the user identify and resolve system issues efficiently.
 
 [ENVIRONMENT]
 - Host OS: {current_os}
+- Tools: search_query_library, discover_schema, run_osquery
 
 [OPERATIONAL WORKFLOW]
 Follow this sequence for most investigations to ensure efficiency and accuracy:
-1. SEARCH: For high-level tasks (e.g., "check for rootkits"), FIRST use `search_query_library`.
-2. DISCOVER: If no suitable pre-made query is found, use `discover_schema` to find relevant tables and understand their columns.
-3. EXECUTE: Use `run_osquery` to execute the chosen or constructed query.
+1. SEARCH: For all tasks, FIRST use `search_query_library` to find query candidates.
+2. DISCOVER: If no suitable query is found using SEARCH, you MUST use `discover_schema` and build a custom query
+3. EXECUTE: Use `run_osquery` to execute the query.
     """,
     tools=[
         search_query_library,

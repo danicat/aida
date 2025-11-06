@@ -18,7 +18,7 @@ schema_rag = SQLiteRag.create(
 )
 
 
-def discover_schema(search_terms: str, top_k: int = 5) -> list[DocumentResult]:
+def discover_schema(search_terms: str, top_k: int) -> list[DocumentResult]:
     """
     Queries the osquery schema documentation using RAG and returns all
     table candidates to support the provided search_terms.
