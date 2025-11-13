@@ -7,7 +7,7 @@ echo "========================================"
 
 # 1. Install Dependencies
 echo "[1/5] Installing Python dependencies..."
-pip install -r requirements.txt
+uv sync
 echo "Dependencies installed."
 
 # 2. Fetch Osquery Specifications & Packs
@@ -29,7 +29,7 @@ echo "Osquery data fetched."
 
 # 3. Download Embedding Model
 echo "[3/5] Downloading embedding model (embeddinggemma-300m)..."
-python3 -c "from huggingface_hub import hf_hub_download; import os; os.makedirs('models/unsloth/embeddinggemma-300m-GGUF', exist_ok=True); hf_hub_download(repo_id='unsloth/embeddinggemma-300m-GGUF', filename='embeddinggemma-300M-Q8_0.gguf', local_dir='models/unsloth/embeddinggemma-300m-GGUF')"
+uv run python -c "from huggingface_hub import hf_hub_download; import os; os.makedirs('models/unsloth/embeddinggemma-300m-GGUF', exist_ok=True); hf_hub_download(repo_id='unsloth/embeddinggemma-300m-GGUF', filename='embeddinggemma-300M-Q8_0.gguf', local_dir='models/unsloth/embeddinggemma-300m-GGUF')"
 echo "Embedding model downloaded."
 
 # 4. Pull LLM
@@ -40,14 +40,14 @@ echo "LLM pulled."
 # 5. Run Ingestion
 echo "[5/5] Building knowledge base (this may take a moment)..."
 echo "  - Ingesting schema..."
-python3 ingest_osquery.py
+uv run python ingest_osquery.py
 echo "  - Ingesting query packs..."
-python3 ingest_packs.py
+uv run python ingest_packs.py
 echo "Knowledge base built."
 
 echo "========================================"
 echo " Setup Complete!"
 echo "========================================"
 echo "You can now run the agent with:"
-echo "  uvicorn main:app --reload"
+echo "  uv run uvicorn main:app --reload"
 echo ""
