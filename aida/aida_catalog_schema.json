@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aida.local/catalog.json",
+  "title": "AIDA Custom Catalog",
+  "catalogId": "aida_custom",
+  "components": {
+    "AidaTable": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaTable" },
+            "columns": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": ["string", "number", "boolean", "null"]
+                }
+              }
+            }
+          },
+          "required": ["component", "columns", "rows"]
+        }
+      ]
+    },
+    "AidaCard": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaCard" },
+            "title": {
+              "description": "Plain text title of the card. Do NOT use markdown formatting or markdown headers like #, ##, ###.",
+              "allOf": [
+                {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"}
+              ]
+            },
+            "body": {
+              "description": "Plain text body of the card. Do NOT use markdown formatting or markdown headers.",
+              "allOf": [
+                {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"}
+              ]
+            }
+          },
+          "required": ["component", "title", "body"]
+        }
+      ]
+    },
+    "AidaButton": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaButton" },
+            "label": {
+              "description": "Plain text label of the button. Do NOT use markdown formatting or markdown headers.",
+              "allOf": [
+                {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"}
+              ]
+            },
+            "action": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
+          },
+          "required": ["component", "label", "action"]
+        }
+      ]
+    },
+    "AidaMetricBar": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaMetricBar" },
+            "label": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "value": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" },
+            "max": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" }
+          },
+          "required": ["component", "label", "value", "max"]
+        }
+      ]
+    },
+    "Column": { "$ref": "https://a2ui.org/specification/v0_9/basic_catalog.json#/$defs/Column" },
+    "Row": { "$ref": "https://a2ui.org/specification/v0_9/basic_catalog.json#/$defs/Row" },
+    "Text": { "$ref": "https://a2ui.org/specification/v0_9/basic_catalog.json#/$defs/Text" },
+    "AidaLogViewer": {
+      "type": "object",
+      "description": "A terminal-like window to display recent system logs, errors, or traces. Use when the user asks for logs.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaLogViewer" },
+            "title": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "text": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" }
+          },
+          "required": ["component", "text"]
+        }
+      ]
+    },
+    "AidaBarChart": {
+      "type": "object",
+      "description": "A bar chart histogram. Use this to compare metrics across different entities, like top processes by RAM or CPU usage.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaBarChart" },
+            "title": {
+              "description": "Plain text title of the chart. Do NOT use markdown formatting.",
+              "allOf": [
+                {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"}
+              ]
+            },
+            "max": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": { "type": "string" },
+                  "value": { "type": "number" },
+                  "color": { "type": "string" }
+                },
+                "required": ["label", "value"]
+              }
+            }
+          },
+          "required": ["component", "title", "series"]
+        }
+      ]
+    },
+    "AidaPieChart": {
+      "type": "object",
+      "description": "A pie chart. Use this to show proportions, such as used vs free disk space or memory.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaPieChart" },
+            "title": {
+              "description": "Plain text title of the chart. Do NOT use markdown formatting.",
+              "allOf": [
+                {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"}
+              ]
+            },
+            "slices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": { "type": "string" },
+                  "value": { "type": "number" },
+                  "color": { "type": "string" }
+                },
+                "required": ["label", "value", "color"]
+              }
+            }
+          },
+          "required": ["component", "title", "slices"]
+        }
+      ]
+    },
+    "AidaLineChart": {
+      "type": "object",
+      "description": "A line chart. Use this to visualize time-series data, like temperature over time, or usage over time.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaLineChart" },
+            "title": {
+              "description": "Plain text title of the chart. Do NOT use markdown formatting.",
+              "allOf": [
+                {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"}
+              ]
+            },
+            "xAxisLabel": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "yAxisLabel": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": { "type": "string" },
+                  "value": { "type": "number" }
+                },
+                "required": ["label", "value"]
+              }
+            }
+          },
+          "required": ["component", "title", "data"]
+        }
+      ]
+    },
+    "AidaCpuMeter": {
+      "type": "object",
+      "description": "A CPU utilization grid. Use this strictly when the user asks about CPU usage or core status.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaCpuMeter" },
+            "cores": {
+              "type": "array",
+              "items": { "type": "number" }
+            }
+          },
+          "required": ["component", "cores"]
+        }
+      ]
+    },
+    "AidaMemoryGauge": {
+      "type": "object",
+      "description": "A progress bar visualization for system RAM or memory. Use this strictly when the user asks about memory or RAM.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaMemoryGauge" },
+            "used": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" },
+            "total": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" }
+          },
+          "required": ["component", "used", "total"]
+        }
+      ]
+    },
+    "AidaDiskUsage": {
+      "type": "object",
+      "description": "Visualizes disk space and mount point usage. Use this strictly when the user asks about disk space or storage volumes.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaDiskUsage" },
+            "mounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" },
+                  "used": { "type": "number" },
+                  "total": { "type": "number" }
+                },
+                "required": ["path", "used", "total"]
+              }
+            }
+          },
+          "required": ["component", "mounts"]
+        }
+      ]
+    },
+    "AidaNetworkThroughput": {
+      "type": "object",
+      "description": "Displays network interface receive/transmit counters. Use this when the user asks about network traffic.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaNetworkThroughput" },
+            "interfaceName": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "rx": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" },
+            "tx": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" }
+          },
+          "required": ["component", "interfaceName", "rx", "tx"]
+        }
+      ]
+    },
+    "AidaSingleSelect": {
+      "type": "object",
+      "description": "A radio button form element. Use this to ask the user to select one option from a list.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaSingleSelect" },
+            "options": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "selectedValue": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "onChange": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
+          },
+          "required": ["component", "options", "onChange"]
+        }
+      ]
+    },
+    "AidaMultipleChoice": {
+      "type": "object",
+      "description": "A checkbox form element. Use this to ask the user to select multiple options from a list.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaMultipleChoice" },
+            "options": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "selectedValues": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "onChange": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
+          },
+          "required": ["component", "options", "selectedValues", "onChange"]
+        }
+      ]
+    },
+    "AidaTextBox": {
+      "type": "object",
+      "description": "A text input box. Use this to ask the user for free-form string input.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaTextBox" },
+            "value": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "placeholder": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "onChange": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
+          },
+          "required": ["component", "onChange"]
+        }
+      ]
+    }
+  }
+}

@@ -3,11 +3,12 @@ name = "aida"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
+    "a2ui-agent-sdk>=0.3.0",
     "coverage>=7.11.3",
     "fastapi>=0.121.1",
-    "google-adk==1.18",
+    "google-adk>=1.18",
     "google-genai>=1.50.0",
     "huggingface-hub>=1.1.2",
     "litellm>=1.79.3",

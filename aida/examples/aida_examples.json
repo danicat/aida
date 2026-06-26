@@ -1,0 +1,395 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "disk_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "disk_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "row_container"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Disk Usage Diagnostics"
+        },
+        {
+          "id": "row_container",
+          "component": "Row",
+          "children": ["pie_chart", "data_table"]
+        },
+        {
+          "id": "pie_chart",
+          "component": "AidaPieChart",
+          "title": "Distribution",
+          "slices": [
+            {"label": "Used", "value": 450.2, "color": "#ffaa00"},
+            {"label": "Free", "value": 150.5, "color": "#00ffff"}
+          ]
+        },
+        {
+          "id": "data_table",
+          "component": "AidaTable",
+          "columns": ["Space Type", "GB"],
+          "rows": [
+            ["Used", 450.2],
+            ["Free", 150.5]
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "battery_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "battery_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "battery_bar", "data_table"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Battery Diagnostic"
+        },
+        {
+          "id": "battery_bar",
+          "component": "AidaMetricBar",
+          "label": "Battery Health",
+          "value": 8500,
+          "max": 8600
+        },
+        {
+          "id": "data_table",
+          "component": "AidaTable",
+          "columns": ["Metric", "Value"],
+          "rows": [
+            ["Cycles", 124],
+            ["State", "Charging"]
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "partition_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "partition_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "partition_usage", "partition_table"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Partition Breakdown"
+        },
+        {
+          "id": "partition_usage",
+          "component": "AidaDiskUsage",
+          "mounts": [
+            {"path": "/", "used": 450, "total": 600},
+            {"path": "/System/Volumes/Data", "used": 150, "total": 600}
+          ]
+        },
+        {
+          "id": "partition_table",
+          "component": "AidaTable",
+          "columns": ["Mount Path", "Total (GB)", "Used (GB)"],
+          "rows": [
+            ["/", 600, 450],
+            ["/System/Volumes/Data", 600, 150]
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "logs_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "logs_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "log_viewer", "search_box"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "System Logs"
+        },
+        {
+          "id": "log_viewer",
+          "component": "AidaLogViewer",
+          "title": "Diagnostic Kernel Logs (Mock Stream)",
+          "text": "system_info: hostname lookup success\nvirtual_memory_info: total registered pages: 2854312"
+        },
+        {
+          "id": "search_box",
+          "component": "AidaTextBox",
+          "placeholder": "Filter logs...",
+          "value": "",
+          "onChange": {}
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "interactive_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "interactive_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "dialogue", "options"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Interactive Diagnostics"
+        },
+        {
+          "id": "dialogue",
+          "component": "Text",
+          "variant": "body",
+          "text": "Which subsystems should we check next?"
+        },
+        {
+          "id": "options",
+          "component": "AidaMultipleChoice",
+          "options": ["Network", "Memory", "CPU", "Disk"],
+          "selectedValues": ["Memory", "CPU"],
+          "onChange": {}
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "performance_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "performance_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "perf_row"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "System Performance"
+        },
+        {
+          "id": "perf_row",
+          "component": "Row",
+          "children": ["cpu_meter", "mem_gauge"]
+        },
+        {
+          "id": "cpu_meter",
+          "component": "AidaCpuMeter",
+          "cores": [45, 12, 89, 5]
+        },
+        {
+          "id": "mem_gauge",
+          "component": "AidaMemoryGauge",
+          "used": 8500,
+          "total": 16000
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "network_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "network_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "net_row"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Network Activity"
+        },
+        {
+          "id": "net_row",
+          "component": "Row",
+          "children": ["throughput", "line_chart"]
+        },
+        {
+          "id": "throughput",
+          "component": "AidaNetworkThroughput",
+          "interfaceName": "en0",
+          "rx": 1500430,
+          "tx": 84300
+        },
+        {
+          "id": "line_chart",
+          "component": "AidaLineChart",
+          "title": "CPU Core Load Over Time (%)",
+          "data": [
+            {"label": "10s ago", "value": 15},
+            {"label": "8s ago", "value": 35},
+            {"label": "6s ago", "value": 20},
+            {"label": "4s ago", "value": 85},
+            {"label": "2s ago", "value": 45},
+            {"label": "Now", "value": 60}
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "processes_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "processes_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "bar_chart"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Top Processes"
+        },
+        {
+          "id": "bar_chart",
+          "component": "AidaBarChart",
+          "title": "Memory Usage by Process",
+          "max": 2000,
+          "series": [
+            {"label": "Chrome", "value": 1500, "color": "#ffaa00"},
+            {"label": "Slack", "value": 800, "color": "#00ffff"},
+            {"label": "VSCode", "value": 1200, "color": "#55ff55"}
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "actions_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "actions_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "action_card"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "System Actions"
+        },
+        {
+          "id": "action_card",
+          "component": "AidaCard",
+          "title": "Diagnostics Options",
+          "body": "Select a subsystem to analyze from the drop-down below, then click Start.",
+          "child": "action_row"
+        },
+        {
+          "id": "action_row",
+          "component": "Row",
+          "children": ["sys_select", "start_button"]
+        },
+        {
+          "id": "sys_select",
+          "component": "AidaSingleSelect",
+          "options": ["Fast Scan", "Deep Scan", "Hardware Only"],
+          "selectedValue": "Fast Scan",
+          "onChange": {}
+        },
+        {
+          "id": "start_button",
+          "component": "AidaButton",
+          "label": "Start Analysis",
+          "action": {}
+        }
+      ]
+    }
+  }
+]

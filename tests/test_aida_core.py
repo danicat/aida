@@ -82,6 +82,16 @@ class TestAidaCore(unittest.TestCase):
 
     # Removed test_07_get_loaded_packs as the function doesn't exist in current codebase
 
+    def test_07_agent_instruction(self):
+        """Verify the agent instruction has the correct A2UI tags and components."""
+        print("\nTesting Agent Instruction...")
+        from aida.agent import A2UI_SYSTEM_INSTRUCTION
+        self.assertIn("<a2ui>", A2UI_SYSTEM_INSTRUCTION)
+        self.assertNotIn("<a2ui-json>", A2UI_SYSTEM_INSTRUCTION)
+        self.assertIn("aida_custom", A2UI_SYSTEM_INSTRUCTION)
+        self.assertIn("AidaPieChart", A2UI_SYSTEM_INSTRUCTION)
+        self.assertIn("Column", A2UI_SYSTEM_INSTRUCTION)
+        print("Agent Instruction test passed.")
 
 if __name__ == "__main__":
     unittest.main()

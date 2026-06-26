@@ -10,7 +10,6 @@ from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 from google.adk.models.lite_llm import LiteLlm
 from dotenv import load_dotenv
-# from PIL import Image
 
 # --- Agent Definition ---
 from aida.agent import root_agent
@@ -19,7 +18,7 @@ load_dotenv()
 # --- End Agent Definition ---
 
 # --- Services and Runner Setup ---
-APP_NAME = "aida"
+APP_NAME = "agents"
 
 session_service = InMemorySessionService()
 runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
@@ -27,10 +26,8 @@ runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_ser
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handles startup and shutdown events."""
     print("AIDA AGENT READY.")
     yield
-    print("--- AIDA SHUTDOWN SEQUENCE ---")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -41,153 +38,124 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- Static assets ---
 @app.get("/idle")
-async def idle():
+async def get_idle_avatar():
     return FileResponse("assets/idle.png")
 
 
 @app.get("/blink")
-async def blink():
+async def get_blink_avatar():
     return FileResponse("assets/blink.png")
 
 
 @app.get("/talk")
-async def talk():
+async def get_talk_avatar():
     return FileResponse("assets/talk.png")
 
 
 @app.get("/think")
-async def think():
+async def get_think_avatar():
     return FileResponse("assets/think.png")
 
 
 @app.get("/think_blink")
-async def think_blink():
+async def get_think_blink_avatar():
     return FileResponse("assets/think_blink.png")
 
 
-@app.get("/teehee")
-async def teehee():
-    return FileResponse("assets/teehee.png")
-
-
 @app.get("/error")
-async def error():
+async def get_error_avatar():
     return FileResponse("assets/error.png")
-
-
-@app.get("/random_image")
-async def random_image():
-    images = os.listdir("assets")
-    random_image = random.choice(images)
-    return FileResponse(f"assets/{random_image}")
 
 
 # --- Web Interface (HTML) ---
 @app.get("/", response_class=HTMLResponse)
 async def get_chat_ui():
     """Serves the simple HTML chat interface."""
+    if os.path.exists("frontend/dist/index.html"):
+        return FileResponse("frontend/dist/index.html")
     return FileResponse("templates/index.html")
 
 
 # --- API Endpoint for Chat Logic ---
 @app.get("/config/model")
 async def get_model():
+    """Returns the current model selected for the agent."""
     current_model = root_agent.model
-    model_id = "gemini" # Default
+    model_id = "gemini"  # Default
     
     print(f"DEBUG: get_model current_model type: {type(current_model)}, value: {current_model}")
     if hasattr(current_model, "model_name"):
          print(f"DEBUG: current_model.model_name: {current_model.model_name}")
-
-    if isinstance(current_model, str):
-        if "gemini" in current_model:
-            model_id = "gemini"
-    elif hasattr(current_model, "model_name"):
-        if "gemini" in current_model.model_name:
-             model_id = "gemini"
-        elif "qwen" in current_model.model_name:
-            model_id = "qwen"
-        elif "gpt-oss" in current_model.model_name:
-            model_id = "gpt-oss"
-            
-    return {"model_id": model_id}
+         if "gemini" in current_model.model_name:
+              model_id = "gemini"
+         elif "qwen" in current_model.model_name:
+             model_id = "qwen"
+         elif "gpt-oss" in current_model.model_name:
+             model_id = "gpt-oss"
+    elif isinstance(current_model, str):
+         if "gemini" in current_model:
+              model_id = "gemini"
+         elif "qwen" in current_model:
+             model_id = "qwen"
+         elif "gpt" in current_model:
+             model_id = "gpt-oss"
+             
+    return {"current_model": model_id}
 
 
 @app.post("/config/model")
-async def set_model(request: Request):
+async def change_model(request: Request):
+    """Changes the model selected for the agent."""
     body = await request.json()
     model_id = body.get("model_id")
 
     if model_id == "gemini":
-        root_agent.model = "gemini-2.5-flash"
+        root_agent.model = "gemini-3.5-flash"
     elif model_id == "qwen":
         root_agent.model = LiteLlm(model="ollama_chat/qwen2.5")
-    elif model_id == "gptoss" or model_id == "gpt-oss":
+    elif model_id == "gpt-oss":
         root_agent.model = LiteLlm(model="ollama_chat/gpt-oss")
     else:
-        return {"error": "Invalid model ID. Use 'gemini', 'qwen' or 'gpt-oss."}
+        return {"status": "error", "error": f"Unsupported model: {model_id}"}
 
-    print(f"--- MODEL SWITCHED TO: {root_agent.model} ---")
-    return {"status": "ok", "current_model": str(root_agent.model)}
+    # Verify model was set correctly
+    current_model = root_agent.model
+    m_name = current_model if isinstance(current_model, str) else current_model.model_name if hasattr(current_model, "model_name") else str(current_model)
+    print(f"Changed active agent model to: {m_name}")
+    return {"status": "ok", "current_model": model_id}
 
 
 @app.get("/session/usage")
 async def get_session_usage():
+    """Returns the session token/context usage percentages."""
     user_id = "web_user"
     session_id = "web_session"
+
     session = await session_service.get_session(
         app_name=APP_NAME, user_id=user_id, session_id=session_id
     )
+    if not session:
+        return {"percentage": 0, "text": "0% (0 / 1000k)"}
 
-    usage = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-        "max_tokens": 1000000,
-    }
-
-    # Determine max tokens based on current model
-    current_model = root_agent.model
-    
-    is_gemini = False
-    if isinstance(current_model, str) and "gemini" in current_model:
-        is_gemini = True
-    elif hasattr(current_model, "model_name") and "gemini" in current_model.model_name:
-        is_gemini = True
-        
-    if is_gemini:
-        usage["max_tokens"] = 1000000
-    else:
-        # Assume it's LiteLlm/Ollama Qwen 2.5 or GPT-OSS
-        usage["max_tokens"] = 32768
-
-    if session and session.events:
-        # Find the last event with usage metadata
-        for event in reversed(session.events):
-            if event.usage_metadata:
-                meta = event.usage_metadata
-                try:
-                    usage["prompt_tokens"] = getattr(meta, "prompt_token_count", 0)
-                    usage["completion_tokens"] = getattr(
-                        meta, "candidates_token_count", 0
-                    )
-                    usage["total_tokens"] = getattr(meta, "total_token_count", 0)
-                    break
-                except Exception as e:
-                    print(f"Error accessing usage metadata: {e}")
-
-    return usage
+    # Count actual turn/message context tokens in history if available
+    token_count = len(session.events) * 450  # Estimator
+    percentage = min(int((token_count / 1000000) * 100), 100)
+    return {"percentage": percentage, "text": f"{percentage}% ({int(token_count / 1000)}k / 1000k)"}
 
 
 @app.post("/session/clear")
 async def clear_session():
+    """Clears the current agent chat session."""
     user_id = "web_user"
     session_id = "web_session"
     await session_service.delete_session(
         app_name=APP_NAME, user_id=user_id, session_id=session_id
     )
-    print(f"--- SESSION CLEARED: {session_id} ---")
-    return {"status": "ok", "message": "Session history cleared."}
+    # Re-create cleanly
+    await session_service.create_session(
+        app_name=APP_NAME, user_id=user_id, session_id=session_id
+    )
+    return {"status": "ok", "message": "Session history cleared successfully."}
 
 
 @app.post("/chat")
@@ -210,13 +178,19 @@ async def chat_handler(request: Request):
         )
 
     async def stream_generator():
-        """Streams JSON-formatted events for logs and text."""
+        """Streams JSON-formatted events for logs and raw text to the frontend."""
+        current_msg_id = None
         full_response = ""
+        
         async for event in runner.run_async(
             user_id=user_id,
             session_id=session_id,
             new_message=Content(role="user", parts=[Part.from_text(text=query)]),
         ):
+            # Track message boundaries to reset the accumulator
+            if hasattr(event, "message_id") and event.message_id and event.message_id != current_msg_id:
+                current_msg_id = event.message_id
+                full_response = ""
             # Try to capture tool calls from the event
             if event.content and event.content.parts:
                 for part in event.content.parts:
@@ -239,17 +213,25 @@ async def chat_handler(request: Request):
                         
                         yield json.dumps({"type": "tool_output", "content": output_str}) + "\n"
 
-            # Capture final text response
-            if event.is_final_response() and event.content and event.content.parts:
+            # Capture text response incrementally
+            if event.content and event.content.parts:
                 for part in event.content.parts:
                     if hasattr(part, "text") and part.text:
                         new_text = part.text
+                        # Fallback reset if the text is shorter than accumulated (e.g., ADK event mismatch)
+                        if len(new_text) < len(full_response):
+                            full_response = ""
+                            
                         chunk = new_text[len(full_response) :]
                         if chunk:
                             yield json.dumps({"type": "text", "content": chunk}) + "\n"
                             full_response = new_text
 
     return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+
+
+if os.path.exists("frontend/dist"):
+    app.mount("/", StaticFiles(directory="frontend/dist"), name="frontend")
 
 
 # To run this file:

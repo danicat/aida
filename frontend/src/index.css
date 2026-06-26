@@ -1,0 +1,84 @@
+:root {
+    --pc98-bg: #000022;
+    --pc98-fg: #d4d4d4;
+    --pc98-green: #55ff55;
+    --pc98-cyan: #00ffff;
+    --pc98-border: #5555aa;
+    --pc98-dark-gray: #222244;
+    --pc98-amber: #ffb700;
+    --pc98-red: #ff5555;
+    --pc98-black: #000000;
+
+    /* A2UI Global Overrides for PC-98 vibe */
+    --a2ui-color-surface: var(--pc98-dark-gray);
+    --a2ui-color-on-surface: var(--pc98-fg);
+    --a2ui-color-background: var(--pc98-bg);
+    --a2ui-color-on-background: var(--pc98-fg);
+    --a2ui-text-color-text: var(--pc98-fg);
+    --a2ui-text-caption-color: var(--pc98-cyan);
+    --a2ui-color-border: var(--pc98-border);
+    --a2ui-border-width: 2px;
+    --a2ui-border-radius: 0px; /* PC-98 is pixelated, sharp corners! */
+    --a2ui-spacing-m: 8px;
+
+    /* Card overrides */
+    --a2ui-card-background: var(--pc98-dark-gray);
+    --a2ui-card-color: var(--pc98-fg);
+    --a2ui-card-border: 4px ridge var(--pc98-border);
+    --a2ui-card-border-radius: 0px;
+    --a2ui-card-box-shadow: none;
+
+    /* Button overrides */
+    --a2ui-color-primary: var(--pc98-green);
+    --a2ui-color-on-primary: var(--pc98-black);
+    --a2ui-color-primary-hover: var(--pc98-cyan);
+    --a2ui-color-on-secondary: var(--pc98-green);
+    --a2ui-button-background: var(--pc98-dark-gray);
+    --a2ui-button-border: 2px solid var(--pc98-green);
+    --a2ui-button-border-radius: 0px;
+    --a2ui-color-secondary-hover: var(--pc98-green);
+    --a2ui-button-box-shadow: none;
+}
+body { 
+    font-family: 'VT323', monospace;
+    font-size: 24px;
+    background-color: var(--pc98-bg);
+    color: var(--pc98-fg);
+    display: flex; 
+    justify-content: center; 
+    align-items: center; /* Center vertically */
+    height: 100vh;
+    margin: 0;
+    padding: 0; /* Remove padding to allow true centering */
+    background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 2px, 3px 100%;
+}
+* { box-sizing: border-box; }
+
+/* Ensure standard a2ui-button hover text turns dark/black on green/cyan background */
+a2ui-button button:hover, .a2ui-button:hover, .a2ui-button-primary:hover {
+    color: var(--pc98-black) !important;
+}
+
+/* Dark theme & high-contrast overrides for basic/standard A2UI components */
+a2ui-surface {
+    --a2ui-color-surface: var(--pc98-dark-gray);
+    --a2ui-color-on-surface: #ffffff !important;
+    --a2ui-color-background: var(--pc98-bg);
+    --a2ui-color-on-background: #ffffff !important;
+    --a2ui-card-background: var(--pc98-dark-gray) !important;
+    --a2ui-card-color: #ffffff !important;
+    --a2ui-card-title-color: var(--pc98-green) !important;
+}
+
+/* Ensure any nested standard cards or components have bright readable texts */
+a2ui-surface [component="card"],
+a2ui-surface [component="info"],
+a2ui-surface card,
+a2ui-surface info,
+a2ui-surface .a2ui-card,
+a2ui-surface .card,
+a2ui-surface a2ui-text {
+    color: #ffffff !important;
+    background-color: var(--pc98-dark-gray) !important;
+}
