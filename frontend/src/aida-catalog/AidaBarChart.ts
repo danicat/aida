@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import { html, css, nothing } from 'lit';
-import { customElement, query } from 'lit/decorators.js';
+import { customElement } from 'lit/decorators.js';
 import { A2uiLitElement, A2uiController } from '@a2ui/lit/v0_9';
 import type { LitComponentApi } from '@a2ui/lit/v0_9';
-import { Chart, registerables } from 'chart.js';
-
-Chart.register(...registerables);
 
 export const AidaBarChartApi = {
     name: 'AidaBarChart',
@@ -27,10 +24,11 @@ export class AidaBarChartElement extends A2uiLitElement<typeof AidaBarChartApi> 
             border: 4px ridge var(--pc98-border);
             background-color: var(--pc98-black, #000000);
             padding: 15px;
-            margin: 10px 0;
+            margin: 10px auto;
             display: flex;
             flex-direction: column;
             width: 100%;
+            max-width: 600px;
         }
         .chart-title {
             color: var(--pc98-green);
@@ -42,117 +40,75 @@ export class AidaBarChartElement extends A2uiLitElement<typeof AidaBarChartApi> 
             padding-bottom: 5px;
             text-shadow: 0 0 5px var(--pc98-green);
         }
-        .canvas-wrapper {
+        .bars-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .bar-label {
+            width: 120px;
+            color: var(--pc98-cyan);
+            font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: left;
+        }
+        .bar-track {
+            flex-grow: 1;
+            height: 20px;
+            border: 2px solid var(--pc98-border);
+            background-color: var(--pc98-black, #000000);
             position: relative;
-            height: 220px;
-            width: 100%;
+        }
+        .bar-fill {
+            height: 100%;
+            background-color: var(--pc98-green);
+            transition: width 0.5s ease-in-out;
+        }
+        .bar-value {
+            width: 80px;
+            text-align: right;
+            color: var(--pc98-fg);
+            font-family: 'VT323', monospace;
+            font-weight: bold;
         }
     `;
 
-    private chartInstance: Chart | null = null;
-
-    @query('canvas')
-    private canvasElement!: HTMLCanvasElement;
-
     protected createController() {
         return new A2uiController(this, AidaBarChartApi);
-    }
-
-    updated() {
-        this.renderChart();
-    }
-
-    disconnectedCallback() {
-        if (this.chartInstance) {
-            this.chartInstance.destroy();
-            this.chartInstance = null;
-        }
-        super.disconnectedCallback();
-    }
-
-    private renderChart() {
-        const props = this.controller.props;
-        if (!props || !this.canvasElement) return;
-
-        if (this.chartInstance) {
-            this.chartInstance.destroy();
-        }
-
-        const ctx = this.canvasElement.getContext('2d');
-        if (!ctx) return;
-
-        const style = getComputedStyle(document.documentElement);
-        const borderColor = style.getPropertyValue('--pc98-border').trim() || '#5555aa';
-        const greenColor = style.getPropertyValue('--pc98-green').trim() || '#55ff55';
-        const fgColor = style.getPropertyValue('--pc98-fg').trim() || '#d4d4d4';
-
-        this.chartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: props.series.map(s => s.label),
-                datasets: [{
-                    label: props.title,
-                    data: props.series.map(s => s.value),
-                    backgroundColor: props.series.map(s => s.color || greenColor),
-                    borderColor: borderColor,
-                    borderWidth: 2,
-                    barPercentage: 0.6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        enabled: true,
-                        backgroundColor: '#000022',
-                        titleColor: '#55ff55',
-                        bodyColor: '#00ffff',
-                        borderColor: '#5555aa',
-                        borderWidth: 2,
-                        titleFont: { family: 'VT323', size: 18 },
-                        bodyFont: { family: 'VT323', size: 16 }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            color: borderColor,
-                            lineWidth: 1
-                        },
-                        ticks: {
-                            color: fgColor,
-                            font: { family: 'VT323', size: 18 }
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: borderColor,
-                            lineWidth: 1
-                        },
-                        ticks: {
-                            color: fgColor,
-                            font: { family: 'VT323', size: 18 }
-                        },
-                        max: props.max
-                    }
-                }
-            }
-        });
     }
 
     render() {
         const props = this.controller.props;
         if (!props) return nothing;
 
+        // Calculate maximum value to determine fill percentages
+        const seriesValues = props.series.map(s => s.value);
+        const computedMax = props.max || (seriesValues.length > 0 ? Math.max(...seriesValues) : 1);
+        const finalMax = computedMax > 0 ? computedMax : 1;
+
         return html`
             <div class="chart-container">
                 <div class="chart-title">${props.title}</div>
-                <div class="canvas-wrapper">
-                    <canvas></canvas>
+                <div class="bars-list">
+                    ${props.series.map(item => {
+                        const percentage = Math.min(100, Math.max(0, (item.value / finalMax) * 100));
+                        return html`
+                            <div class="bar-row">
+                                <div class="bar-label" title="${item.label}">${item.label}</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: ${percentage}%; background-color: ${item.color || 'var(--pc98-green)'};"></div>
+                                </div>
+                                <div class="bar-value">${item.value}</div>
+                            </div>
+                        `;
+                    })}
                 </div>
             </div>
         `;

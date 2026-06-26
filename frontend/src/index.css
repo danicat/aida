@@ -9,6 +9,9 @@
     --pc98-red: #ff5555;
     --pc98-black: #000000;
 
+    --aida-font-size-base: 24px;
+    font-size: var(--aida-font-size-base);
+
     /* A2UI Global Overrides for PC-98 vibe */
     --a2ui-color-surface: var(--pc98-dark-gray);
     --a2ui-color-on-surface: var(--pc98-fg);
@@ -41,7 +44,7 @@
 }
 body { 
     font-family: 'VT323', monospace;
-    font-size: 24px;
+    font-size: var(--aida-font-size-base);
     background-color: var(--pc98-bg);
     color: var(--pc98-fg);
     display: flex; 
@@ -81,4 +84,11 @@ a2ui-surface .card,
 a2ui-surface a2ui-text {
     color: #ffffff !important;
     background-color: var(--pc98-dark-gray) !important;
+}
+
+
+/* Responsive side-by-side layout overrides to prevent overlapping/clipping */
+a2ui-basic-row {
+    flex-wrap: wrap !important;
+    gap: 24px !important;
 }

@@ -10,8 +10,10 @@ export const AidaDiskUsageApi = {
         mounts: z.array(z.object({
             path: z.string(),
             used: z.number(),
-            total: z.number()
-        }))
+            total: z.number(),
+            unit: z.string().optional()
+        })),
+        unit: z.string().optional()
     })
 };
 
@@ -21,45 +23,53 @@ export class AidaDiskUsageElement extends A2uiLitElement<typeof AidaDiskUsageApi
         .disk-container {
             border: 2px solid var(--pc98-border);
             background-color: var(--pc98-black, #000000);
-            padding: 10px;
+            padding: 12px;
             margin: 10px 0;
+            width: 100%;
         }
         .disk-title {
             color: var(--pc98-green);
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             border-bottom: 1px dashed var(--pc98-border);
             padding-bottom: 5px;
+            font-size: 1.1em;
+            font-weight: bold;
         }
         .mount-row {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 5px;
+            gap: 15px;
+            margin-bottom: 8px;
+            width: 100%;
         }
         .mount-path {
             color: var(--pc98-cyan);
-            width: 80px;
+            flex: 1 1 160px;
+            min-width: 100px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
         .mount-bar-bg {
-            flex-grow: 1;
-            height: 15px;
+            flex: 1.5 2 150px;
+            height: 14px;
             background-color: var(--pc98-black, #000);
             border: 1px solid var(--pc98-border);
+            max-width: 450px;
         }
         .mount-bar-fg {
             height: 100%;
             background-color: var(--pc98-green);
+            transition: width 0.5s ease-in-out;
         }
         .mount-bar-fg.high { background-color: var(--pc98-red); }
         
         .mount-value {
             color: var(--pc98-fg);
-            width: 100px;
+            flex: 0 0 130px;
             text-align: right;
             font-size: 0.9em;
+            font-family: 'VT323', monospace;
         }
     `;
 
@@ -71,7 +81,12 @@ export class AidaDiskUsageElement extends A2uiLitElement<typeof AidaDiskUsageApi
         const props = this.controller.props;
         if (!props) return nothing;
 
-        const formatGB = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(1) + 'G';
+        const formatPair = (used: number, total: number, itemUnit?: string) => {
+            const displayUnit = itemUnit || props.unit;
+            const formattedUsed = used.toFixed(used % 1 === 0 ? 0 : 1);
+            const formattedTotal = total.toFixed(total % 1 === 0 ? 0 : 1);
+            return displayUnit ? `${formattedUsed} ${displayUnit} / ${formattedTotal} ${displayUnit}` : `${formattedUsed} / ${formattedTotal}`;
+        };
 
         return html`
             <div class="disk-container">
@@ -85,7 +100,7 @@ export class AidaDiskUsageElement extends A2uiLitElement<typeof AidaDiskUsageApi
                             <div class="mount-bar-bg">
                                 <div class="mount-bar-fg ${clamped > 90 ? 'high' : ''}" style="width: ${clamped}%"></div>
                             </div>
-                            <div class="mount-value">${formatGB(mount.used)}/${formatGB(mount.total)}</div>
+                            <div class="mount-value">${formatPair(mount.used, mount.total, mount.unit)}</div>
                         </div>
                     `;
                 })}

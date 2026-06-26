@@ -226,9 +226,13 @@
           "properties": {
             "component": { "const": "AidaMemoryGauge" },
             "used": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" },
-            "total": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" }
+            "total": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber" },
+            "unit": {
+              "type": "string",
+              "description": "Explicitly specify the unit of measurement to avoid assumptions ('B' for Bytes, 'MB' for Megabytes, 'GB' for Gigabytes). You MUST provide this so the UI can format values properly."
+            }
           },
-          "required": ["component", "used", "total"]
+          "required": ["component", "used", "total", "unit"]
         }
       ]
     },
@@ -247,10 +251,18 @@
                 "properties": {
                   "path": { "type": "string" },
                   "used": { "type": "number" },
-                  "total": { "type": "number" }
+                  "total": { "type": "number" },
+                  "unit": {
+                    "type": "string",
+                    "description": "Explicitly specify the unit of measurement for this storage volume ('B', 'MB', 'GB')."
+                  }
                 },
-                "required": ["path", "used", "total"]
+                "required": ["path", "used", "total", "unit"]
               }
+            },
+            "unit": {
+              "type": "string",
+              "description": "Explicitly specify the unit of measurement at the root level if all mounts share the same unit ('B', 'MB', 'GB')."
             }
           },
           "required": ["component", "mounts"]
@@ -327,6 +339,44 @@
             "onChange": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
           },
           "required": ["component", "onChange"]
+        }
+      ]
+    },
+    "AidaSlider": {
+      "type": "object",
+      "description": "An interactive range slider control. Use this when the user asks to adjust a setting like font size, sound volume, or layout scaling.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaSlider" },
+            "label": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "value": { "type": "number" },
+            "step": { "type": "number" },
+            "cssVar": { "type": "string" },
+            "unit": { "type": "string" },
+            "onChange": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
+          },
+          "required": ["component", "label", "min", "max", "value"]
+        }
+      ]
+    },
+    "AidaColorPicker": {
+      "type": "object",
+      "description": "An interactive color selector control. Use this when the user asks to change the color of a UI element, background, or theme accent.",
+      "allOf": [
+        {"$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"},
+        {
+          "properties": {
+            "component": { "const": "AidaColorPicker" },
+            "label": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString" },
+            "value": { "type": "string" },
+            "cssVar": { "type": "string" },
+            "onChange": { "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action" }
+          },
+          "required": ["component", "label", "value"]
         }
       ]
     }

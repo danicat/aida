@@ -8,7 +8,8 @@ export const AidaMemoryGaugeApi = {
     name: 'AidaMemoryGauge',
     schema: z.object({
         used: z.number(),
-        total: z.number()
+        total: z.number(),
+        unit: z.string().optional()
     })
 };
 
@@ -18,23 +19,26 @@ export class AidaMemoryGaugeElement extends A2uiLitElement<typeof AidaMemoryGaug
         .mem-container {
             border: 2px solid var(--pc98-border);
             background-color: var(--pc98-dark-gray);
-            padding: 10px;
+            padding: 12px;
             margin: 10px 0;
             display: flex;
             align-items: center;
             gap: 15px;
+            width: 100%;
         }
         .mem-label {
             color: var(--pc98-green);
             font-size: 1.2em;
             text-shadow: 0 0 5px var(--pc98-green);
+            flex: 0 0 60px;
         }
         .gauge-bg {
-            flex-grow: 1;
+            flex: 1.5 2 150px;
             height: 24px;
             background-color: var(--pc98-black, #000);
             border: 2px inset var(--pc98-border);
             position: relative;
+            max-width: 450px;
         }
         .gauge-fg {
             height: 100%;
@@ -46,8 +50,9 @@ export class AidaMemoryGaugeElement extends A2uiLitElement<typeof AidaMemoryGaug
         
         .mem-value {
             color: var(--pc98-fg);
-            min-width: 120px;
+            flex: 0 0 150px;
             text-align: right;
+            font-family: 'VT323', monospace;
         }
     `;
 
@@ -63,7 +68,12 @@ export class AidaMemoryGaugeElement extends A2uiLitElement<typeof AidaMemoryGaug
         const clamped = Math.max(0, Math.min(100, percentage));
         const stateClass = clamped > 85 ? 'high' : clamped > 60 ? 'med' : '';
 
-        const formatGB = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        const formatPair = (used: number, total: number) => {
+            const displayUnit = props.unit;
+            const formattedUsed = used.toFixed(used % 1 === 0 ? 0 : 1);
+            const formattedTotal = total.toFixed(total % 1 === 0 ? 0 : 1);
+            return displayUnit ? `${formattedUsed} ${displayUnit} / ${formattedTotal} ${displayUnit}` : `${formattedUsed} / ${formattedTotal}`;
+        };
 
         return html`
             <div class="mem-container">
@@ -71,7 +81,7 @@ export class AidaMemoryGaugeElement extends A2uiLitElement<typeof AidaMemoryGaug
                 <div class="gauge-bg">
                     <div class="gauge-fg ${stateClass}" style="width: ${clamped}%"></div>
                 </div>
-                <div class="mem-value">${formatGB(props.used)} / ${formatGB(props.total)}</div>
+                <div class="mem-value">${formatPair(props.used, props.total)}</div>
             </div>
         `;
     }

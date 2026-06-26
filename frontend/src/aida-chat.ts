@@ -90,8 +90,12 @@ export class AidaChat extends LitElement {
       max-width: 95vw;
       max-height: 95vh;
       font-family: 'VT323', monospace;
-      font-size: 24px;
+      font-size: var(--aida-font-size-base);
       color: var(--pc98-fg);
+    }
+    
+    * {
+        box-sizing: border-box;
     }
     
     #main-container {
@@ -116,7 +120,7 @@ export class AidaChat extends LitElement {
     }
     #boot-header {
         text-align: center;
-        font-size: 38px;
+        font-size: calc(var(--aida-font-size-base) * 1.58);
         color: var(--pc98-green);
         text-shadow: 0 0 10px var(--pc98-green);
         border-bottom: 2px solid var(--pc98-border);
@@ -145,7 +149,7 @@ export class AidaChat extends LitElement {
         flex: 1;
         max-width: 600px;
         border: 4px ridge var(--pc98-border);
-        background-color: #000011;
+        background-color: var(--pc98-black, #000000);
         padding: 25px;
         position: relative;
         min-height: 180px;
@@ -163,7 +167,7 @@ export class AidaChat extends LitElement {
         border-color: transparent var(--pc98-border) transparent transparent;
     }
     .bubble-text {
-        font-size: 28px;
+        font-size: calc(var(--aida-font-size-base) * 1.16);
         color: var(--pc98-green);
         line-height: 1.4;
     }
@@ -185,15 +189,15 @@ export class AidaChat extends LitElement {
         min-height: 0;
         overflow-y: auto;
         border: 2px solid var(--pc98-border);
-        background-color: #000011;
+        background-color: var(--pc98-black, #000000);
         padding: 15px;
         margin-bottom: 15px;
         scrollbar-width: thin;
-        scrollbar-color: var(--pc98-border) #000011;
+        scrollbar-color: var(--pc98-border) var(--pc98-black, #000000);
     }
     .canvas-title {
         color: var(--pc98-cyan);
-        font-size: 28px;
+        font-size: calc(var(--aida-font-size-base) * 1.16);
         text-align: center;
         border-bottom: 2px solid var(--pc98-border);
         padding-bottom: 5px;
@@ -214,14 +218,14 @@ export class AidaChat extends LitElement {
         border-bottom: 2px solid var(--pc98-border);
         padding: 4px 10px;
         color: var(--pc98-green);
-        font-size: 18px;
+        font-size: calc(var(--aida-font-size-base) * 0.75);
     }
     .canvas-surface-header .close-btn {
         background: transparent;
         border: none;
         color: var(--pc98-red);
         font-family: inherit;
-        font-size: 18px;
+        font-size: calc(var(--aida-font-size-base) * 0.75);
         cursor: pointer;
         padding: 0;
     }
@@ -238,7 +242,7 @@ export class AidaChat extends LitElement {
         color: var(--pc98-green);
         margin-right: 10px;
         font-weight: bold;
-        font-size: 24px;
+        font-size: var(--aida-font-size-base);
     }
     #user-input input {
         flex-grow: 1;
@@ -248,7 +252,7 @@ export class AidaChat extends LitElement {
         border-bottom: 2px solid var(--pc98-green);
         color: var(--pc98-green);
         font-family: 'VT323', monospace;
-        font-size: 24px;
+        font-size: var(--aida-font-size-base);
         outline: none;
         min-width: 0;
     }
@@ -257,8 +261,8 @@ export class AidaChat extends LitElement {
     }
     
     /* Standard messages */
-    .user-message { text-align: right; color: var(--pc98-cyan); margin-bottom: 8px; font-size: 24px; }
-    .agent-message { color: var(--pc98-green); margin-bottom: 8px; font-size: 24px; }
+    .user-message { text-align: right; color: var(--pc98-cyan); margin-bottom: 8px; font-size: var(--aida-font-size-base); }
+    .agent-message { color: var(--pc98-green); margin-bottom: 8px; font-size: var(--aida-font-size-base); }
     .agent-message p { margin-top: 0; margin-bottom: 5px; }
     .agent-message code { 
         font-family: 'VT323', monospace; 
@@ -271,7 +275,7 @@ export class AidaChat extends LitElement {
     .agent-message pre { 
         font-family: 'VT323', monospace; 
         font-size: inherit; 
-        background-color: #000011; 
+        background-color: var(--pc98-black, #000000); 
         padding: 10px; 
         overflow-x: auto; 
         border: 1px solid var(--pc98-border);
@@ -296,7 +300,7 @@ export class AidaChat extends LitElement {
     }
     .panel-title {
         color: var(--pc98-green);
-        font-size: 20px;
+        font-size: calc(var(--aida-font-size-base) * 0.83);
         margin-bottom: 5px;
         text-align: center;
     }
@@ -307,7 +311,7 @@ export class AidaChat extends LitElement {
     }
     #model-row button {
         flex: 1;
-        font-size: 18px;
+        font-size: calc(var(--aida-font-size-base) * 0.75);
     }
     .panel button {
         padding: 0;
@@ -319,7 +323,7 @@ export class AidaChat extends LitElement {
         color: var(--pc98-green);
         border: 2px solid var(--pc98-border);
         font-family: 'VT323', monospace;
-        font-size: 20px;
+        font-size: calc(var(--aida-font-size-base) * 0.83);
         cursor: pointer;
         transition: all 0.2s;
     }
@@ -338,13 +342,13 @@ export class AidaChat extends LitElement {
         height: 180px;
         flex-shrink: 0;
         border: 2px solid var(--pc98-border);
-        background-color: #000011;
+        background-color: var(--pc98-black, #000000);
         padding: 10px;
-        font-size: 18px;
+        font-size: calc(var(--aida-font-size-base) * 0.75);
         overflow-y: auto;
         overflow-x: hidden;
         scrollbar-width: thin;
-        scrollbar-color: var(--pc98-border) #000011;
+        scrollbar-color: var(--pc98-border) var(--pc98-black, #000000);
         overflow-wrap: anywhere;
         margin-top: 10px;
     }
@@ -369,7 +373,7 @@ export class AidaChat extends LitElement {
     #context-bar-container {
         flex: 1;
         height: 100%;
-        background-color: #000011;
+        background-color: var(--pc98-black, #000000);
         border: 1px solid var(--pc98-border);
         padding: 0; 
         position: relative;
@@ -395,14 +399,14 @@ export class AidaChat extends LitElement {
         justify-content: center;
         z-index: 1;
         color: #fff;
-        text-shadow: 1px 1px 2px #000;
-        font-size: 18px;
+        text-shadow: 1px 1px 2px var(--pc98-black, #000000);
+        font-size: calc(var(--aida-font-size-base) * 0.75);
         margin-bottom: 0;
     }
 
     #avatar-window {
         border: 4px ridge var(--pc98-border);
-        background-color: #000011;
+        background-color: var(--pc98-black, #000000);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -416,7 +420,7 @@ export class AidaChat extends LitElement {
 
     #avatar-label {
         width: 100%;
-        font-size: 20px;
+        font-size: calc(var(--aida-font-size-base) * 0.83);
         font-weight: bold;
         text-align: center;
         border: 3px solid var(--pc98-border);
@@ -425,13 +429,13 @@ export class AidaChat extends LitElement {
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-top: 8px;
+        margin-top: 0px;
         box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
     }
 
     #jrpg-bubble {
         position: relative;
-        height: 180px;
+        height: 256px;
         display: flex;
         flex-direction: column;
     }
@@ -441,20 +445,20 @@ export class AidaChat extends LitElement {
         color: var(--pc98-cyan); /* Highlight with retro cyan */
     }
     .bubble-text {
-        font-size: 22px;
+        font-size: calc(var(--aida-font-size-base) * 0.92);
         color: var(--pc98-green);
         line-height: 1.3;
         flex: 1;
         overflow-y: auto;
         padding-right: 5px;
         scrollbar-width: thin;
-        scrollbar-color: var(--pc98-border) #000000;
+        scrollbar-color: var(--pc98-border) var(--pc98-black, #000000);
     }
     .bubble-text::-webkit-scrollbar {
         width: 6px;
     }
     .bubble-text::-webkit-scrollbar-track {
-        background: #000000;
+        background: var(--pc98-black, #000000);
     }
     .bubble-text::-webkit-scrollbar-thumb {
         background: var(--pc98-border);
@@ -474,21 +478,21 @@ export class AidaChat extends LitElement {
     #jrpg-bubble::before {
         content: '';
         position: absolute;
-        left: -15px;
+        right: -15px;
         top: 40px;
-        border-width: 10px 15px 10px 0;
+        border-width: 10px 0 10px 15px;
         border-style: solid;
-        border-color: transparent var(--pc98-border) transparent transparent;
+        border-color: transparent transparent transparent var(--pc98-border);
         z-index: 10;
     }
     #jrpg-bubble::after {
         content: '';
         position: absolute;
-        left: -11px;
+        right: -11px;
         top: 40px;
-        border-width: 10px 15px 10px 0;
+        border-width: 10px 0 10px 15px;
         border-style: solid;
-        border-color: transparent #000000 transparent transparent;
+        border-color: transparent transparent transparent var(--pc98-black, #000000);
         z-index: 11;
     }
 
@@ -573,11 +577,66 @@ export class AidaChat extends LitElement {
 
   private initProcessor() {
     this.processor = new MessageProcessor([basicCatalog, aidaCustomCatalog], (action: any) => {
-      let textToSend = "";
-      if (typeof action === 'string') textToSend = action;
-      else if (action && action.name) textToSend = action.name;
-      else textToSend = JSON.stringify(action);
-      this.sendMessage(textToSend);
+      console.log("A2UI ACTION TRIGGERED:", action);
+      
+      let actionName = 'submit';
+      let resolvedContext: any = {};
+      let showInUi = false; // Send silently as background prompt to agent without creating user bubble
+
+      if (typeof action === 'string') {
+          actionName = action;
+      } else if (action && typeof action === 'object') {
+          const actionPayload = action.action || action;
+          actionName = actionPayload.name || (actionPayload.event && actionPayload.event.name) || 'submit';
+          
+          const contextObj = actionPayload.context || (actionPayload.event && actionPayload.event.context) || actionPayload;
+          
+          if (Array.isArray(contextObj)) {
+              contextObj.forEach((ctx: any) => {
+                  if (ctx && typeof ctx === 'object') {
+                      if ('key' in ctx && 'value' in ctx) {
+                          resolvedContext[ctx.key] = ctx.value;
+                      }
+                  }
+              });
+          } else if (contextObj && typeof contextObj === 'object') {
+              Object.keys(contextObj).forEach(key => {
+                  if (['name', 'event', 'surfaceId', 'sourceComponentId', 'timestamp', 'version', 'action'].includes(key)) {
+                      return;
+                  }
+                  const val = contextObj[key];
+                  if (val && typeof val === 'object') {
+                      if (val.literalString !== undefined) {
+                          resolvedContext[key] = val.literalString;
+                      } else if (val.literalBool !== undefined) {
+                          resolvedContext[key] = val.literalBool;
+                      } else if (val.literalInt !== undefined) {
+                          resolvedContext[key] = val.literalInt;
+                      } else if (val.literalDouble !== undefined) {
+                          resolvedContext[key] = val.literalDouble;
+                      } else {
+                          resolvedContext[key] = JSON.stringify(val);
+                      }
+                  } else {
+                      resolvedContext[key] = val;
+                  }
+              });
+          }
+      }
+
+      let responseText = "";
+      if (Object.keys(resolvedContext).length > 0) {
+          responseText = `Action: ${actionName}\nContext:\n`;
+          Object.keys(resolvedContext).forEach(k => {
+              responseText += `- ${k}: ${resolvedContext[k]}\n`;
+          });
+          responseText = responseText.trim();
+      } else {
+          responseText = actionName;
+      }
+
+      this.logActivity(`INTERACTION SUBMITTED: ${actionName}`);
+      this.sendMessage(responseText, showInUi);
     });
 
     this.processor.onSurfaceCreated((surface: any) => {
@@ -825,13 +884,15 @@ export class AidaChat extends LitElement {
       return 'Analyzing System Diagnostics...';
   }
 
-  private async sendMessage(text: string) {
+  private async sendMessage(text: string, showInUi = true) {
       if (!text.trim()) return;
 
       this.currentTask = this.getTaskSummary(text);
 
-      this.messages = [...this.messages, { role: 'user', content: `> ${text}` }];
-      if (this.inputEl) this.inputEl.value = '';
+      if (showInUi) {
+          this.messages = [...this.messages, { role: 'user', content: `> ${text}` }];
+      }
+      if (this.inputEl && showInUi) this.inputEl.value = '';
 
       if (await this.handleCommand(text)) {
           this.currentTask = null;
@@ -1005,27 +1066,27 @@ export class AidaChat extends LitElement {
                   <div class="canvas-surface-header">
                       <span>SYSTEM DIALOGUE CONSOLE</span>
                   </div>
-                  <div class="canvas-surface-body" style="display: flex; gap: 20px; align-items: flex-start; background-color: #000011; padding: 15px;">
-                      <div id="boot-avatar-pane" style="flex-shrink: 0; width: 256px;">
-                          <div id="avatar-window" style="width: 256px; height: 256px; border: 3px ridge var(--pc98-border);">
-                              <img src="/${this.avatarState}?cb=${this.cacheBuster}" alt="Agent Avatar" id="avatar-img">
-                          </div>
-                          <div id="avatar-label" style="color: ${this.avatarLabelColor};">
-                              <span class="glowing-dot ${this.avatarState === 'error' ? 'error' : this.avatarState.startsWith('think') ? 'thinking' : ''}"></span>
-                              ${this.avatarLabelText}
-                          </div>
-                      </div>
+                  <div class="canvas-surface-body" style="display: flex; gap: 20px; align-items: flex-start; background-color: var(--pc98-dark-gray, #222244); padding: 15px;">
                       <div style="display: flex; flex-direction: column; flex: 1; gap: 15px;">
-                          <div id="jrpg-bubble" style="border: 3px ridge var(--pc98-border); padding: 15px; background: #000000;">
-                              <div class="character-name" style="color: var(--pc98-green); font-size: 20px; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid var(--pc98-border); padding-bottom: 3px;">AIDA</div>
+                          <div id="jrpg-bubble" style="border: 3px ridge var(--pc98-border); padding: 15px; background: var(--pc98-black, #000000);">
+                              <div class="character-name" style="color: var(--pc98-green); font-size: calc(var(--aida-font-size-base) * 0.83); font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid var(--pc98-border); padding-bottom: 3px;">AIDA</div>
                               <div class="bubble-text">${this.dialogueText}</div>
                           </div>
                           ${this.currentTask ? html`
-                              <div style="border: 2px solid var(--pc98-cyan); padding: 10px 15px; background-color: #000022; color: var(--pc98-cyan); font-family: inherit; font-size: 20px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; line-height: 1.2;">
+                              <div style="border: 2px solid var(--pc98-cyan); padding: 10px 15px; background-color: var(--pc98-bg, #000022); color: var(--pc98-cyan); font-family: inherit; font-size: calc(var(--aida-font-size-base) * 0.83); display: flex; align-items: center; gap: 10px; flex-shrink: 0; line-height: 1.2; height: 39px;">
                                   <span style="color: var(--pc98-amber); font-weight: bold; animation: blink 1.2s infinite;">[ACTIVE TASK]</span>
                                   <span>${this.currentTask}</span>
                               </div>
                           ` : ''}
+                      </div>
+                      <div id="boot-avatar-pane" style="flex-shrink: 0; width: 256px; display: flex; flex-direction: column; gap: 15px;">
+                          <div id="avatar-window" style="width: 256px; height: 256px; border: 3px ridge var(--pc98-border);">
+                              <img src="/${this.avatarState}?cb=${this.cacheBuster}" alt="Agent Avatar" id="avatar-img">
+                          </div>
+                          <div id="avatar-label" style="color: ${this.avatarLabelColor}; margin-top: 0;">
+                              <span class="glowing-dot ${this.avatarState === 'error' ? 'error' : this.avatarState.startsWith('think') ? 'thinking' : ''}"></span>
+                              ${this.avatarLabelText}
+                          </div>
                       </div>
                   </div>
               </div>

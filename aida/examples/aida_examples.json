@@ -391,5 +391,49 @@
         }
       ]
     }
+  },
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "settings_surface",
+      "catalogId": "aida_custom"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "settings_surface",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "font_size_slider", "color_picker"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "variant": "h1",
+          "text": "Interface Settings"
+        },
+        {
+          "id": "font_size_slider",
+          "component": "AidaSlider",
+          "label": "Base Font Size",
+          "min": 16,
+          "max": 36,
+          "value": 24,
+          "step": 1,
+          "cssVar": "--aida-font-size-base",
+          "unit": "px"
+        },
+        {
+          "id": "color_picker",
+          "component": "AidaColorPicker",
+          "label": "Theme Accent Color",
+          "value": "#55ff55",
+          "cssVar": "--pc98-green"
+        }
+      ]
+    }
   }
 ]

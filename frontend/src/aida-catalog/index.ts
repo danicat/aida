@@ -16,6 +16,8 @@ import { AidaNetworkThroughput } from './AidaNetworkThroughput.js';
 import { AidaSingleSelect } from './AidaSingleSelect.js';
 import { AidaMultipleChoice } from './AidaMultipleChoice.js';
 import { AidaTextBox } from './AidaTextBox.js';
+import { AidaSlider } from './AidaSlider.js';
+import { AidaColorPicker } from './AidaColorPicker.js';
 
 export const aidaCustomCatalog = new Catalog(
     'aida_custom', 
@@ -24,7 +26,9 @@ export const aidaCustomCatalog = new Catalog(
         AidaTable, AidaCard, AidaButton, AidaMetricBar,
         AidaLogViewer, AidaBarChart, AidaPieChart, AidaLineChart,
         AidaCpuMeter, AidaMemoryGauge, AidaDiskUsage, AidaNetworkThroughput,
-        AidaSingleSelect, AidaMultipleChoice, AidaTextBox
+        AidaSingleSelect, AidaMultipleChoice, AidaTextBox,
+        AidaSlider, AidaColorPicker
     ],
     BASIC_FUNCTIONS
 );
+
