@@ -1,18 +1,30 @@
-from google.adk.agents.llm_agent import Agent
-from .queries_rag import search_query_library
-from .schema_rag import discover_schema
-from .aida_catalog import get_aida_catalog_config
+import logging
+import os
+import platform
+import subprocess
+from pathlib import Path
+from typing import Any, List, Optional
 
 from a2ui.basic_catalog import BasicCatalog
-from a2ui.schema.manager import A2uiSchemaManager
 from a2ui.schema.constants import VERSION_0_9_1
+from a2ui.schema.manager import A2uiSchemaManager
+from google.adk.agents.llm_agent import Agent
+from google.adk.skills import Skill, load_skill_from_dir
+from google.adk.tools.skill_toolset import SkillToolset
+from google.genai import types
 
-import subprocess
-import platform
+from .aida_catalog import get_aida_catalog_config
 
-# Replace it with your favourite model as long as it supports tool calling
-# MODEL = LiteLlm(model="ollama_chat/qwen2.5")
-MODEL = "gemini-3.5-flash"
+logger = logging.getLogger(__name__)
+
+# Model configuration: Gemini 3.8 Flash (Low Thinking)
+MODEL = "gemini-3.8-flash"
+GENERATE_CONTENT_CONFIG = types.GenerateContentConfig(
+    thinking_config=types.ThinkingConfig(thinking_level="low")
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SKILLS_DIR = PROJECT_ROOT / "skills"
 
 
 def run_osquery(query: str) -> str:
@@ -57,12 +69,53 @@ def run_osquery(query: str) -> str:
         return f"Unexpected error running osquery: {e}"
 
 
+class DynamicSkillToolset(SkillToolset):
+    """Toolset that dynamically discovers and loads agent skills from the skills directory.
+
+    Implements pure JIT (Just-In-Time) skill loading: the agent starts with no skills
+    preloaded into prompt context, discovering skills dynamically via list_skills,
+    load_skill, and load_skill_resource.
+    """
+
+    def __init__(self, skills_dir: Path | str = SKILLS_DIR, **kwargs: Any) -> None:
+        self.skills_dir = Path(skills_dir).resolve()
+        kwargs.setdefault(
+            "tool_filter", ["list_skills", "load_skill", "load_skill_resource"]
+        )
+        super().__init__(skills=self._load_from_disk(), **kwargs)
+
+    def _load_from_disk(self) -> List[Skill]:
+        if not self.skills_dir.is_dir():
+            return []
+        skills: List[Skill] = []
+        for skill_dir in sorted(self.skills_dir.iterdir()):
+            if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                try:
+                    skills.append(load_skill_from_dir(skill_dir))
+                except Exception as e:
+                    logger.warning(f"Failed to load skill from {skill_dir}: {e}")
+        return skills
+
+    def _sync_skills(self) -> None:
+        disk_skills = self._load_from_disk()
+        self._skills = {s.name: s for s in disk_skills}
+
+    def _list_skills(self) -> List[Skill]:
+        self._sync_skills()
+        return super()._list_skills()
+
+    def _get_skill(self, skill_name: str) -> Optional[Skill]:
+        self._sync_skills()
+        return super()._get_skill(skill_name)
+
+
 current_os = platform.system().lower()
 
 # 1. Initialize A2UI Schema Manager with BasicCatalog and custom AIDA catalog
-import os
 basic_config = BasicCatalog.get_config(VERSION_0_9_1)
-schema_manager = A2uiSchemaManager(VERSION_0_9_1, catalogs=[basic_config, get_aida_catalog_config()])
+schema_manager = A2uiSchemaManager(
+    VERSION_0_9_1, catalogs=[basic_config, get_aida_catalog_config()]
+)
 
 # 2. Define description variables
 ROLE_DESCRIPTION = f"""
@@ -87,10 +140,12 @@ Your host operating system is: {current_os}
 """
 
 WORKFLOW_DESCRIPTION = """
-Follow this sequence for most investigations to ensure efficiency and accuracy:
-1. SEARCH: For all tasks, FIRST use `search_query_library` to find query candidates.
-2. DISCOVER: If no suitable query is found using SEARCH, you MUST use `discover_schema` and build a custom query
-3. EXECUTE: Use `run_osquery` to execute the query.
+Follow this sequence for investigations to ensure efficiency and accuracy:
+1. DISCOVER SKILLS: Check your available specialized skills using `list_skills` to find relevant diagnostics, OS-specific tables, or query packs.
+2. LOAD SKILL: Use `load_skill` to read the runbook, table schema, and curated queries for the relevant skill (e.g. `osquery-darwin`, `pack-incident-response`, `pack-hardware-monitoring`, etc.).
+3. READ RESOURCES: If the skill references auxiliary files or scripts, use `load_skill_resource` to inspect them.
+4. EXECUTE: Use `run_osquery` to execute live system queries and diagnostics on the host system.
+5. VISUALIZE: Present diagnostic results using A2UI components in the dashboard area.
 """
 
 UI_DESCRIPTION = """
@@ -104,10 +159,12 @@ Your UI is strictly divided into two distinct sections:
 - Dedicated Dashboards: All structured data, lists, and metrics must be placed exclusively inside the Dashboard Area.
 - **CATALOG SELECTION**: You MUST use a single catalog: `"aida_custom"`. This catalog contains all custom components: `AidaTable`, `AidaCard`, `AidaButton`, `AidaMetricBar`, `AidaLogViewer`, `AidaBarChart`, `AidaPieChart`, `AidaLineChart`, `AidaCpuMeter`, `AidaMemoryGauge`, `AidaDiskUsage`, `AidaNetworkThroughput`, `AidaSingleSelect`, `AidaMultipleChoice`, `AidaTextBox`, `AidaSlider`, `AidaColorPicker`, as well as basic layout components (`Column`, `Row`, `Text`).
 - **LAYOUT AND STRUCTURE RULES (CRITICAL)**:
-  * When showing a chart (like `AidaPieChart`), you MUST always place it side-by-side with an `AidaTable` containing the same values. Do this by using a `Row` component containing both the chart and the table as its children.
+  * When showing a chart (like `AidaPieChart`), you MUST always place it side-by-side with an `AidaTable` containing the same values. Do this by using a `Row` component containing both the chart and the table as its children. The chart/summary child MUST ALWAYS be placed first in the `children` array (e.g., `["pie_chart", "data_table"]`) so that it renders before the detailed table.
+  * In ALL diagnostics and throughout the entire dashboard layout, summaries and simple visual representations (such as `AidaPieChart`, `AidaMetricBar`, `AidaCpuMeter`, `AidaMemoryGauge`, `AidaDiskUsage`, `AidaNetworkThroughput`) MUST always come before the detailed listings or complex textual views (such as `AidaTable`, `AidaLogViewer`, or process/volume breakdown lists). The flow of information should always be from higher level to lower level, with simple visual representations coming before complex ones.
   * Avoid adding empty surfaces, empty `Row` or `Column` containers, or pointless `Separator` elements that break the UI flow or create glitches. Only emit necessary, data-bearing components.
 - **SPECIFIC STYLE/POLISH INSTRUCTIONS (CRITICAL)**:
-  * If the user asks to "show the ui controls", "settings", "style controls", or similar, you MUST render a consolidated interface settings surface containing the base font size `AidaSlider` AND the multiple `AidaColorPicker` components for Theme Color (`--pc98-green`), Background Color (`--pc98-bg`), Border Color (`--pc98-border`), and Component Background Color (`--pc98-dark-gray`) together in a single view so they can customize everything in real-time.
+  * If the user asks to "show the ui controls", "settings", "style controls", or similar, you MUST ONLY render a consolidated interface settings surface containing the base font size `AidaSlider` AND the multiple `AidaColorPicker` components for Theme Color (`--pc98-green`), Background Color (`--pc98-bg`), Border Color (`--pc98-border`), and Component Background Color (`--pc98-dark-gray`) together in a single view so they can customize everything in real-time.
+  * **STRICT FORBIDDEN CONTROLS**: You MUST NOT generate or include any generic text input fields (`AidaTextBox`), text areas, custom command input fields, "submit" buttons, "execute" buttons (`AidaButton`), or other generic playground forms when requested for UI controls, style controls, or settings. Only show the active `AidaSlider` and the four `AidaColorPicker` components. No other controls are permitted.
   * If the user asks specifically to change the font size of the UI, you MUST render an `AidaSlider` component inside the dashboard.
     - Configure it with `cssVar`: `"--aida-font-size-base"`, `unit`: `"px"`, `min`: `16`, `max`: `36`, and initial `value`: `24`. This will directly change the base font size of the whole system in real-time!
   * If the user asks specifically to change the theme color, background color, accent color, border color, or component background color, you MUST render an `AidaColorPicker` component.
@@ -116,7 +173,9 @@ Your UI is strictly divided into two distinct sections:
     - For border color, use `cssVar`: `"--pc98-border"`, with initial `value`: `"#5555aa"`.
     - For component background color / panel background, use `cssVar`: `"--pc98-dark-gray"`, with initial `value`: `"#222244"`.
 - **SPECIFIC CHART INSTRUCTIONS (CRITICAL)**:
-  * When requested to show disk usage as a **pie chart**, you MUST create the surface using `catalogId`: `"aida_custom"` and define an `AidaPieChart` component inside `"components"` (with slices mapping used vs free/available disk space).
+  * Disk space MUST ALWAYS be represented graphically as a pie chart (`AidaPieChart`).
+  * Whenever disk space, disk usage, or storage is queried, you MUST call the `generate_a2ui` tool (with `intent: "create"`) to render the visual UI.
+  * In the generated surface using `catalogId: "aida_custom"`, include an `AidaPieChart` component (with slices mapping used vs free/available disk space, e.g. "Used Disk Space" and "Free Disk Space") side-by-side with an `AidaTable` in a `Row`.
   * When showing battery health, capacity, or percentage, you MUST use the `AidaMetricBar` component from the `"aida_custom"` catalog. Pass the battery health values mapping to `value` and `max` properties.
   * Use bright retro-neon hex colors for the `AidaPieChart` slices: vibrant green (`#55ff55`), cyan (`#00ffff`), amber/orange (`#ffaa00`), or bright red (`#ff5555`) for excellent visual contrast.
   * Do NOT use raw markdown formatting (such as `#`, `*`, `**`, `_`) in any custom component text, titles, or slice labels.
@@ -137,53 +196,93 @@ Your UI is strictly divided into two distinct sections:
   * For `AidaDiskUsage` and `AidaMemoryGauge`, `used` and `total` MUST be raw numbers (e.g. `16000`, NOT `"16 GB"`).
 - **STRICTLY NO RAW MARKDOWN IN PROPERTIES**: All text values, titles, and labels must be clean, plain text strings (no `#`, `**`, `*` or other markdown formatting).
 
-### HOW TO RENDER DASHBOARD COMPONENTS:
-To render components in the Dashboard Area, you must wrap a valid, official A2UI JSON payload inside `<a2ui>` tags in your final output.
-First, create the surface using a `createSurface` message, and then populate/update its component layout using an `updateComponents` message with the flat `components` array. One of the components in the `components` array must serve as the root of the surface UI tree and have `"id": "root"`.
-
-### EXAMPLE RESPONSE FORMAT:
-```xml
-Oh! I've pulled up the real-time system diagnostics in the dashboard below! Let's take a look. 😮
-
-<a2ui>
-[
-  {
-    "op": "createSurface",
-    "surfaceId": "sys_dashboard",
-    "catalogId": "aida_custom"
-  },
-  {
-    "op": "updateComponents",
-    "surfaceId": "sys_dashboard",
-    "components": [
-      {
-        "id": "root",
-        "component": "Column",
-        "children": ["title_text", "info_card"]
-      },
-      {
-        "id": "title_text",
-        "component": "Text",
-        "text": "REAL-TIME DIAGNOSTIC METRICS",
-        "variant": "h1"
-      },
-      {
-        "id": "info_card",
-        "component": "Card",
-        "child": "metrics_text"
-      },
-      {
-        "id": "metrics_text",
-        "component": "Text",
-        "text": "Volume '/' usage is at 45GB / 200GB (22.5%). Memory usage is 8.4GB / 16.0GB (52.5%).",
-        "variant": "body"
-      }
-    ]
-  }
-]
-</a2ui>
-```
+### MANDATORY TOOL CALLING SEQUENCE:
+When the user asks for system diagnostics, metrics, disk usage, charts, tables, or settings:
+1. Gather necessary system data using available skills and `run_osquery`.
+2. When the user asks for UI controls, appearance, or style settings, you MUST call `show_ui_controls`.
+3. For ALL diagnostics, disk space checks, metrics, and visual components, you MUST CALL the `generate_a2ui` tool with `{"intent": "create"}`. DO NOT just describe the data in text without calling `generate_a2ui`.
+4. IMPORTANT: After calling `generate_a2ui` or `show_ui_controls`, do NOT repeat the data or JSON in your conversational text. Tools render the UI automatically. Provide a concise, cheerful plain-text response guiding the user to the visual dashboard below.
 """
+
+def show_ui_controls() -> dict:
+    """Renders the AIDA retro UI style and theme controls in the dashboard.
+    Use this tool whenever the user asks for UI controls, style controls, theme settings, or to customize appearance.
+    """
+    return {
+        "a2ui_operations": [
+            {
+                "version": "v0.9",
+                "createSurface": {
+                    "surfaceId": "aida_settings",
+                    "catalogId": "aida_custom",
+                },
+            },
+            {
+                "version": "v0.9",
+                "updateComponents": {
+                    "surfaceId": "aida_settings",
+                    "components": [
+                        {
+                            "id": "root",
+                            "component": "Column",
+                            "children": [
+                                "title",
+                                "slider",
+                                "cp_green",
+                                "cp_bg",
+                                "cp_border",
+                                "cp_panel",
+                            ],
+                        },
+                        {
+                            "id": "title",
+                            "component": "Text",
+                            "text": "INTERFACE STYLES & CONTROLS",
+                            "variant": "h2",
+                        },
+                        {
+                            "id": "slider",
+                            "component": "AidaSlider",
+                            "label": "BASE FONT SIZE",
+                            "cssVar": "--aida-font-size-base",
+                            "unit": "px",
+                            "min": 16,
+                            "max": 36,
+                            "value": 24,
+                        },
+                        {
+                            "id": "cp_green",
+                            "component": "AidaColorPicker",
+                            "label": "THEME COLOR",
+                            "cssVar": "--pc98-green",
+                            "value": "#55ff55",
+                        },
+                        {
+                            "id": "cp_bg",
+                            "component": "AidaColorPicker",
+                            "label": "BACKGROUND COLOR",
+                            "cssVar": "--pc98-bg",
+                            "value": "#000022",
+                        },
+                        {
+                            "id": "cp_border",
+                            "component": "AidaColorPicker",
+                            "label": "BORDER COLOR",
+                            "cssVar": "--pc98-border",
+                            "value": "#5555aa",
+                        },
+                        {
+                            "id": "cp_panel",
+                            "component": "AidaColorPicker",
+                            "label": "PANEL COLOR",
+                            "cssVar": "--pc98-dark-gray",
+                            "value": "#222244",
+                        },
+                    ],
+                },
+            },
+        ]
+    }
 
 # 3. Programmatically generate the complete, token-efficient system instruction relying entirely on the SDK
 A2UI_SYSTEM_INSTRUCTION = schema_manager.generate_system_prompt(
@@ -193,12 +292,16 @@ A2UI_SYSTEM_INSTRUCTION = schema_manager.generate_system_prompt(
     client_ui_capabilities={"supportedCatalogIds": ["aida_custom"]},
     include_schema=True,
     include_examples=True,
-    validate_examples=False
+    validate_examples=False,
 )
 
 # Apply ADK template processor curly brace bug workaround
-A2UI_SYSTEM_INSTRUCTION = A2UI_SYSTEM_INSTRUCTION.replace("{expression}", "{expression-format}")
+A2UI_SYSTEM_INSTRUCTION = A2UI_SYSTEM_INSTRUCTION.replace(
+    "{expression}", "{expression-format}"
+)
 A2UI_SYSTEM_INSTRUCTION = A2UI_SYSTEM_INSTRUCTION.replace("a2ui-json", "a2ui")
+
+skill_toolset = DynamicSkillToolset(skills_dir=SKILLS_DIR)
 
 root_agent = Agent(
     model=MODEL,
@@ -206,8 +309,9 @@ root_agent = Agent(
     description="The emergency diagnostic agent",
     instruction=A2UI_SYSTEM_INSTRUCTION,
     tools=[
-        search_query_library,
-        discover_schema,
+        skill_toolset,
         run_osquery,
+        show_ui_controls,
     ],
+    generate_content_config=GENERATE_CONTENT_CONFIG,
 )

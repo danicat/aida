@@ -58,7 +58,7 @@ export class AidaMultipleChoiceElement extends A2uiLitElement<typeof AidaMultipl
         return new A2uiController(this, AidaMultipleChoiceApi);
     }
 
-    private toggleSelection(opt: string) {
+    private toggleSelection(opt: any) {
         const props = this.controller.props;
         if (!props || !props.onChange || typeof props.onChange !== 'function') return;
 
@@ -77,7 +77,7 @@ export class AidaMultipleChoiceElement extends A2uiLitElement<typeof AidaMultipl
 
         return html`
             <div class="select-container">
-                ${props.options.map((opt: string) => html`
+                ${props.options.map((opt: any) => html`
                     <div class="option" @click=${() => this.toggleSelection(opt)}>
                         <div class="checkbox ${props.selectedValues.includes(opt) ? 'selected' : ''}"></div>
                         <span>${opt}</span>

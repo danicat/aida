@@ -1,18 +1,23 @@
 [project]
 name = "aida"
 version = "0.1.0"
-description = "Add your description here"
+description = "AIDA Emergency Diagnostic Assistant"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
-    "a2ui-agent-sdk>=0.3.0",
+    "a2ui-agent-sdk>=0.2.4",
+    "ag-ui-protocol>=1.0.0",
+    "ag-ui-adk>=0.7.0",
     "coverage>=7.11.3",
     "fastapi>=0.121.1",
-    "google-adk>=1.18",
-    "google-genai>=1.50.0",
-    "huggingface-hub>=1.1.2",
-    "litellm>=1.79.3",
+    "google-adk>=2.3.0",
+    "google-genai>=2.9.0",
+    "psutil>=6.0.0",
     "python-dotenv>=1.2.1",
-    "sqlite-rag>=0.1.4",
+    "sse-starlette>=2.1.0",
     "uvicorn>=0.38.0",
 ]
+
+[tool.uv.sources]
+ag-ui-protocol = { path = "refs/ag-ui/sdks/python", editable = true }
+ag-ui-adk = { path = "refs/ag-ui/integrations/adk-middleware/python", editable = true }

@@ -1,11 +1,10 @@
-fastapi
-uvicorn
-python-dotenv
-huggingface_hub
-sqlite-rag
-litellm
-google-genai
-# Note: Ensure the correct package for google.adk is installed.
-# It might be a preview package or require a specific install source.
-google-adk
-coverage
+fastapi>=0.121.1
+uvicorn>=0.38.0
+python-dotenv>=1.2.1
+google-genai>=2.9.0
+google-adk>=2.3.0
+ag-ui-protocol>=1.0.0
+ag-ui-adk>=0.7.0
+sse-starlette>=2.1.0
+psutil>=6.0.0
+coverage>=7.11.3

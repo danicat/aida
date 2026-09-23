@@ -88,7 +88,30 @@ a2ui-surface a2ui-text {
 
 
 /* Responsive side-by-side layout overrides to prevent overlapping/clipping */
-a2ui-basic-row {
+a2ui-row, a2ui-basic-row, .a2ui-row, .row, [component="Row"], [component="row"] {
+    display: flex !important;
     flex-wrap: wrap !important;
     gap: 24px !important;
+    margin: 15px 0 !important;
 }
+
+a2ui-column, a2ui-basic-column, .a2ui-column, .column, [component="Column"], [component="column"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    margin: 15px 0 !important;
+}
+
+/* Ensure all host elements for visual metrics have robust default flex styles inside rows */
+aida-metric-bar, aida-memory-gauge, aida-disk-usage, aida-cpu-meter, aida-network-throughput, aida-bar-chart, aida-pie-chart, aida-line-chart {
+    display: block !important;
+    flex: 1 1 300px !important;
+    min-width: 250px !important;
+}
+
+aida-table, [component="AidaTable"], [component="table"], .aida-table, table {
+    display: block !important;
+    flex: 1.2 1 350px !important;
+    min-width: 280px !important;
+}
+

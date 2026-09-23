@@ -1,1118 +1,1404 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { MessageProcessor } from '@a2ui/web_core/v0_9';
 import { basicCatalog, Context } from '@a2ui/lit/v0_9';
 import { aidaCustomCatalog } from './aida-catalog/index.js';
 import { provide } from '@lit/context';
 import { renderMarkdown } from '@a2ui/markdown-it';
+import MarkdownIt from 'markdown-it';
 import '@a2ui/lit/v0_9'; // Registers the <a2ui-surface> component
+import { streamAgentResponse } from './protocol.js';
 
-class A2uiStreamParser {
-    private buffer = '';
-    private state: 'text' | 'a2ui' = 'text';
+const mdRenderer = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
-    onText: (text: string) => void;
-    onA2ui: (jsonStr: string) => void;
-
-    constructor(onText: (text: string) => void, onA2ui: (jsonStr: string) => void) {
-        this.onText = onText;
-        this.onA2ui = onA2ui;
-    }
-
-    append(chunk: string) {
-        this.buffer += chunk;
-        this.processBuffer();
-    }
-
-    private processBuffer() {
-        let changed = true;
-        while (changed) {
-            changed = false;
-            if (this.state === 'text') {
-                const openTagIndex = this.buffer.indexOf('<a2ui>');
-                if (openTagIndex !== -1) {
-                    const textPart = this.buffer.substring(0, openTagIndex);
-                    if (textPart) {
-                        this.onText(textPart);
-                    }
-                    this.buffer = this.buffer.substring(openTagIndex + '<a2ui>'.length);
-                    this.state = 'a2ui';
-                    changed = true;
-                } else {
-                    let splitIndex = this.buffer.length;
-                    for (let i = 1; i < 6; i++) {
-                        if (this.buffer.endsWith('<a2ui>'.substring(0, i))) {
-                            splitIndex = this.buffer.length - i;
-                            break;
-                        }
-                    }
-                    const textPart = this.buffer.substring(0, splitIndex);
-                    if (textPart) {
-                        this.onText(textPart);
-                        this.buffer = this.buffer.substring(splitIndex);
-                    }
-                }
-            } else if (this.state === 'a2ui') {
-                const closeTagIndex = this.buffer.indexOf('</a2ui>');
-                if (closeTagIndex !== -1) {
-                    const jsonPart = this.buffer.substring(0, closeTagIndex);
-                    if (jsonPart) {
-                        const cleanJsonStr = jsonPart.replace(/```[a-zA-Z]*\n?|```/g, '').trim();
-                        this.onA2ui(cleanJsonStr);
-                    }
-                    this.buffer = this.buffer.substring(closeTagIndex + '</a2ui>'.length);
-                    this.state = 'text';
-                    changed = true;
-                }
-            }
-        }
-    }
-
-    end() {
-        if (this.state === 'text' && this.buffer) {
-            this.onText(this.buffer);
-            this.buffer = '';
-        }
-    }
+export interface SystemStatus {
+  os: string;
+  hostname: string;
+  kernel: string;
+  uptime: string;
+  health: 'NOMINAL' | 'WARNING' | 'CRITICAL';
+  cpu?: number;
+  memory?: number;
 }
-interface ChatMessage {
+
+export interface ChatTurn {
+  id: string;
   role: 'user' | 'agent' | 'system';
   content: string;
+  timestamp: string;
+  status?: string;
+  surfaceIds: string[];
 }
 
 @customElement('aida-chat')
 export class AidaChat extends LitElement {
-  static styles = css`
-    :host {
-      display: block;
-      width: 1200px;
-      height: 850px;
-      max-width: 95vw;
-      max-height: 95vh;
-      font-family: 'VT323', monospace;
-      font-size: var(--aida-font-size-base);
-      color: var(--pc98-fg);
-    }
-    
-    * {
-        box-sizing: border-box;
-    }
-    
-    #main-container {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        width: 100%;
-        height: 100%;
-    }
-
-    /* Boot / Greeting Layout (Centered Cozy) */
-    #boot-container {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        width: 100%;
-        height: 100%;
-        border: 4px double var(--pc98-border);
-        padding: 40px;
-        background-color: var(--pc98-bg);
-        box-shadow: 0 0 20px rgba(85, 85, 170, 0.4);
-    }
-    #boot-header {
-        text-align: center;
-        font-size: calc(var(--aida-font-size-base) * 1.58);
-        color: var(--pc98-green);
-        text-shadow: 0 0 10px var(--pc98-green);
-        border-bottom: 2px solid var(--pc98-border);
-        padding-bottom: 15px;
-        margin-bottom: 20px;
-    }
-    #boot-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 40px;
-        flex-grow: 1;
-        margin-bottom: 30px;
-    }
-    #boot-avatar-pane {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 15px;
-    }
-    .boot-avatar {
-        width: 256px !important;
-        height: 256px !important;
-    }
-    #boot-bubble {
-        flex: 1;
-        max-width: 600px;
-        border: 4px ridge var(--pc98-border);
-        background-color: var(--pc98-black, #000000);
-        padding: 25px;
-        position: relative;
-        min-height: 180px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    #boot-bubble::before {
-        content: '';
-        position: absolute;
-        left: -15px;
-        top: 50px;
-        border-width: 10px 15px 10px 0;
-        border-style: solid;
-        border-color: transparent var(--pc98-border) transparent transparent;
-    }
-    .bubble-text {
-        font-size: calc(var(--aida-font-size-base) * 1.16);
-        color: var(--pc98-green);
-        line-height: 1.4;
-    }
-
-    /* Single-Column Full Canvas Layout (Active Workspace) */
-    #canvas-container {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        width: 100%;
-        height: 100%;
-        border: 4px double var(--pc98-border);
-        padding: 20px;
-        background-color: var(--pc98-bg);
-        box-shadow: 0 0 20px rgba(85, 85, 170, 0.4);
-    }
-    #canvas-viewport {
-        flex-grow: 1;
-        min-height: 0;
-        overflow-y: auto;
-        border: 2px solid var(--pc98-border);
-        background-color: var(--pc98-black, #000000);
-        padding: 15px;
-        margin-bottom: 15px;
-        scrollbar-width: thin;
-        scrollbar-color: var(--pc98-border) var(--pc98-black, #000000);
-    }
-    .canvas-title {
-        color: var(--pc98-cyan);
-        font-size: calc(var(--aida-font-size-base) * 1.16);
-        text-align: center;
-        border-bottom: 2px solid var(--pc98-border);
-        padding-bottom: 5px;
-        text-shadow: 0 0 8px var(--pc98-cyan);
-    }
-
-    /* Canvas Surfaces */
-    .canvas-surface-container {
-        margin-bottom: 15px;
-        border: 2px solid var(--pc98-border);
-        background-color: var(--pc98-bg);
-    }
-    .canvas-surface-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: var(--pc98-dark-gray);
-        border-bottom: 2px solid var(--pc98-border);
-        padding: 4px 10px;
-        color: var(--pc98-green);
-        font-size: calc(var(--aida-font-size-base) * 0.75);
-    }
-    .canvas-surface-header .close-btn {
-        background: transparent;
-        border: none;
-        color: var(--pc98-red);
-        font-family: inherit;
-        font-size: calc(var(--aida-font-size-base) * 0.75);
-        cursor: pointer;
-        padding: 0;
-    }
-    .canvas-surface-header .close-btn:hover {
-        color: #fff;
-    }
-    .canvas-surface-body {
-        padding: 12px;
-    }
-
-    /* Input elements */
-    #user-input { display: flex; align-items: center; }
-    #prompt-symbol {
-        color: var(--pc98-green);
-        margin-right: 10px;
-        font-weight: bold;
-        font-size: var(--aida-font-size-base);
-    }
-    #user-input input {
-        flex-grow: 1;
-        padding: 8px;
-        background-color: var(--pc98-bg);
-        border: none;
-        border-bottom: 2px solid var(--pc98-green);
-        color: var(--pc98-green);
-        font-family: 'VT323', monospace;
-        font-size: var(--aida-font-size-base);
-        outline: none;
-        min-width: 0;
-    }
-    #user-input input::placeholder {
-        color: var(--pc98-border);
-    }
-    
-    /* Standard messages */
-    .user-message { text-align: right; color: var(--pc98-cyan); margin-bottom: 8px; font-size: var(--aida-font-size-base); }
-    .agent-message { color: var(--pc98-green); margin-bottom: 8px; font-size: var(--aida-font-size-base); }
-    .agent-message p { margin-top: 0; margin-bottom: 5px; }
-    .agent-message code { 
-        font-family: 'VT323', monospace; 
-        font-size: inherit; 
-        background-color: var(--pc98-dark-gray); 
-        padding: 2px 4px; 
-        color: var(--pc98-cyan);
-        word-break: break-all; 
-    }
-    .agent-message pre { 
-        font-family: 'VT323', monospace; 
-        font-size: inherit; 
-        background-color: var(--pc98-black, #000000); 
-        padding: 10px; 
-        overflow-x: auto; 
-        border: 1px solid var(--pc98-border);
-        max-width: 100%; 
-        white-space: pre-wrap; 
-    }
-    .agent-message pre code {
-        background-color: transparent;
-        padding: 0;
-        color: inherit;
-    }
-
-    /* Common panel overrides */
-    .panel {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        border: 2px solid var(--pc98-border);
-        padding: 10px;
-        background-color: var(--pc98-dark-gray);
-        margin-top: 10px;
-    }
-    .panel-title {
-        color: var(--pc98-green);
-        font-size: calc(var(--aida-font-size-base) * 0.83);
-        margin-bottom: 5px;
-        text-align: center;
-    }
-    #model-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    #model-row button {
-        flex: 1;
-        font-size: calc(var(--aida-font-size-base) * 0.75);
-    }
-    .panel button {
-        padding: 0;
-        height: 40px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: var(--pc98-bg);
-        color: var(--pc98-green);
-        border: 2px solid var(--pc98-border);
-        font-family: 'VT323', monospace;
-        font-size: calc(var(--aida-font-size-base) * 0.83);
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    .panel button:hover, .panel button.active {
-        background-color: var(--pc98-green);
-        color: var(--pc98-bg);
-    }
-    #debug-toggle.active {
-        background-color: var(--pc98-green);
-        color: var(--pc98-bg);
-    }
-
-    /* Logs & memory meters in Canvas */
-    #system-log-window {
-        width: 100%;
-        height: 180px;
-        flex-shrink: 0;
-        border: 2px solid var(--pc98-border);
-        background-color: var(--pc98-black, #000000);
-        padding: 10px;
-        font-size: calc(var(--aida-font-size-base) * 0.75);
-        overflow-y: auto;
-        overflow-x: hidden;
-        scrollbar-width: thin;
-        scrollbar-color: var(--pc98-border) var(--pc98-black, #000000);
-        overflow-wrap: anywhere;
-        margin-top: 10px;
-    }
-    .log-entry { 
-        margin-bottom: 4px; 
-        line-height: 1.2;
-        white-space: pre-wrap;
-    }
-    .log-time { color: var(--pc98-cyan); margin-right: 5px; }
-    .log-sys { color: var(--pc98-amber); }
-
-    /* Memory / context usage meter */
-    #memory-row {
-        display: flex;
-        gap: 10px;
-        height: 35px;
-    }
-    #memory-row button {
-        flex: 0 0 30%;
-        height: 100%;
-    }
-    #context-bar-container {
-        flex: 1;
-        height: 100%;
-        background-color: var(--pc98-black, #000000);
-        border: 1px solid var(--pc98-border);
-        padding: 0; 
-        position: relative;
-    }
-    #context-bar {
-        width: 0%;
-        height: 100%;
-        background-color: var(--pc98-green);
-        transition: width 0.5s ease, background-color 0.5s ease;
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: 0;
-    }
-    #context-label {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1;
-        color: #fff;
-        text-shadow: 1px 1px 2px var(--pc98-black, #000000);
-        font-size: calc(var(--aida-font-size-base) * 0.75);
-        margin-bottom: 0;
-    }
-
-    #avatar-window {
-        border: 4px ridge var(--pc98-border);
-        background-color: var(--pc98-black, #000000);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        image-rendering: pixelated;
-    }
-    #avatar-window img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    #avatar-label {
-        width: 100%;
-        font-size: calc(var(--aida-font-size-base) * 0.83);
-        font-weight: bold;
-        text-align: center;
-        border: 3px solid var(--pc98-border);
-        height: 39px; /* Reduced by 25% from 52px */
-        background-color: var(--pc98-dark-gray);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-top: 0px;
-        box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
-    }
-
-    #jrpg-bubble {
-        position: relative;
-        height: 256px;
-        display: flex;
-        flex-direction: column;
-    }
-    #jrpg-bubble strong, #jrpg-bubble b {
-        font-weight: bold;
-        font-size: inherit; /* Prevent bold from rendering larger */
-        color: var(--pc98-cyan); /* Highlight with retro cyan */
-    }
-    .bubble-text {
-        font-size: calc(var(--aida-font-size-base) * 0.92);
-        color: var(--pc98-green);
-        line-height: 1.3;
-        flex: 1;
-        overflow-y: auto;
-        padding-right: 5px;
-        scrollbar-width: thin;
-        scrollbar-color: var(--pc98-border) var(--pc98-black, #000000);
-    }
-    .bubble-text::-webkit-scrollbar {
-        width: 6px;
-    }
-    .bubble-text::-webkit-scrollbar-track {
-        background: var(--pc98-black, #000000);
-    }
-    .bubble-text::-webkit-scrollbar-thumb {
-        background: var(--pc98-border);
-    }
-    #jrpg-bubble p {
-        margin-top: 0;
-        margin-bottom: 8px;
-    }
-    #jrpg-bubble ul, #jrpg-bubble ol {
-        margin-top: 0;
-        margin-bottom: 8px;
-        padding-left: 20px;
-    }
-    #jrpg-bubble li {
-        margin-bottom: 4px;
-    }
-    #jrpg-bubble::before {
-        content: '';
-        position: absolute;
-        right: -15px;
-        top: 40px;
-        border-width: 10px 0 10px 15px;
-        border-style: solid;
-        border-color: transparent transparent transparent var(--pc98-border);
-        z-index: 10;
-    }
-    #jrpg-bubble::after {
-        content: '';
-        position: absolute;
-        right: -11px;
-        top: 40px;
-        border-width: 10px 0 10px 15px;
-        border-style: solid;
-        border-color: transparent transparent transparent var(--pc98-black, #000000);
-        z-index: 11;
-    }
-
-    .glowing-dot {
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-        background-color: var(--pc98-green);
-        border-radius: 50%;
-        margin-right: 12px;
-        box-shadow: 0 0 10px var(--pc98-green);
-        animation: pulse 1.5s infinite;
-    }
-    .glowing-dot.error {
-        background-color: var(--pc98-red);
-        box-shadow: 0 0 8px var(--pc98-red);
-    }
-    .glowing-dot.warning {
-        background-color: var(--pc98-amber);
-        box-shadow: 0 0 8px var(--pc98-amber);
-    }
-    .glowing-dot.thinking {
-        background-color: var(--pc98-cyan);
-        box-shadow: 0 0 8px var(--pc98-cyan);
-    }
-
-    .loading-msg {
-       color: var(--pc98-green);
-       font-style: italic;
-    }
-    
-    /* Global basic overrides missing from component scope */
-    button {
-       outline: none;
-    }
-    h1, h2, h3, h4, h5, h6 {
-       color: var(--pc98-cyan);
-       text-shadow: 0 0 5px var(--pc98-cyan);
-       margin: 10px 0;
-       border-bottom: 1px dashed var(--pc98-border);
-       padding-bottom: 5px;
-    }
-    @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-    }
-    @keyframes pulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.2); opacity: 0.6; }
-    }
-  `;
-
-  // state
   @provide({ context: Context.markdown })
   markdownRenderer = renderMarkdown;
 
-  @state() private messages: ChatMessage[] = [];
-  @state() private logs: {time: string, sys: boolean, content: string, type: 'normal'|'error'}[] = [];
-  @state() private avatarState: 'idle' | 'think' | 'think_blink' | 'talk' | 'error' | 'blink' = 'idle';
-  @state() private avatarLabelText = 'STATUS: ONLINE';
-  @state() private avatarLabelColor = 'var(--pc98-green)';
-  @state() private debugMode = false;
-  @state() activeModel = 'gemini';
-  @state() contextPercentage = 0;
-  @state() contextText = '0% (0 / 1000k)';
+  // --- Reactive States ---
+  @state() private turns: ChatTurn[] = [];
   @state() private activeSurfaces: Map<string, any> = new Map();
+  @state() private avatarState: 'idle' | 'blink' | 'talk' | 'think' | 'think_blink' | 'error' = 'idle';
+  @state() private avatarLabelText = 'ONLINE';
+  @state() private avatarLabelColor = 'var(--pc98-green)';
+  @state() private statusBarText = 'IDLE - AWAITING INPUT';
+  @state() private isStreaming = false;
   @state() private showLogs = false;
-  @state() private showModelPanel = false;
-  @state() private showMemoryPanel = false;
-  @state() private dialogueText = 'Please state the nature of the diagnostic emergency.';
-  @state() private currentTask: string | null = null;
+  @state() private logs: Array<{ time: string; content: string; type: 'normal' | 'error' }> = [];
   @state() private cacheBuster = Date.now();
-  
+  @state() private systemStatus: SystemStatus = {
+    hostname: 'AIDA-DIAG-NODE',
+    os: 'Darwin (macOS)',
+    kernel: 'Darwin Kernel 25.3.0',
+    uptime: '14h 22m',
+    health: 'NOMINAL'
+  };
+
   @query('#message-text') private inputEl!: HTMLInputElement;
-  @query('#system-log-window') private logsContainer!: HTMLElement;
-  
-  private animationInterval: any = null;
-  private thinkBlinkInterval: any = null;
-  private processedA2uiBlocks: Set<string> = new Set();
+  @query('#canvas-viewport') private canvasViewport!: HTMLElement;
+  @query('#log-window') private logWindow!: HTMLElement;
 
   private processor!: MessageProcessor<any>;
+  private animationInterval: any = null;
+  private thinkBlinkInterval: any = null;
+  private statusPollTimer: any = null;
+  private activeAgentTurnId: string | null = null;
+  private abortController: AbortController | null = null;
 
-  private initProcessor() {
-    this.processor = new MessageProcessor([basicCatalog, aidaCustomCatalog], (action: any) => {
-      console.log("A2UI ACTION TRIGGERED:", action);
-      
-      let actionName = 'submit';
-      let resolvedContext: any = {};
-      let showInUi = false; // Send silently as background prompt to agent without creating user bubble
+  static styles = css`
+    :host {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--pc98-bg, #000022);
+      color: var(--pc98-fg, #d4d4d4);
+      font-family: 'VT323', monospace;
+      font-size: var(--aida-font-size-base, 24px);
+      box-sizing: border-box;
+    }
 
-      if (typeof action === 'string') {
-          actionName = action;
-      } else if (action && typeof action === 'object') {
-          const actionPayload = action.action || action;
-          actionName = actionPayload.name || (actionPayload.event && actionPayload.event.name) || 'submit';
-          
-          const contextObj = actionPayload.context || (actionPayload.event && actionPayload.event.context) || actionPayload;
-          
-          if (Array.isArray(contextObj)) {
-              contextObj.forEach((ctx: any) => {
-                  if (ctx && typeof ctx === 'object') {
-                      if ('key' in ctx && 'value' in ctx) {
-                          resolvedContext[ctx.key] = ctx.value;
-                      }
-                  }
-              });
-          } else if (contextObj && typeof contextObj === 'object') {
-              Object.keys(contextObj).forEach(key => {
-                  if (['name', 'event', 'surfaceId', 'sourceComponentId', 'timestamp', 'version', 'action'].includes(key)) {
-                      return;
-                  }
-                  const val = contextObj[key];
-                  if (val && typeof val === 'object') {
-                      if (val.literalString !== undefined) {
-                          resolvedContext[key] = val.literalString;
-                      } else if (val.literalBool !== undefined) {
-                          resolvedContext[key] = val.literalBool;
-                      } else if (val.literalInt !== undefined) {
-                          resolvedContext[key] = val.literalInt;
-                      } else if (val.literalDouble !== undefined) {
-                          resolvedContext[key] = val.literalDouble;
-                      } else {
-                          resolvedContext[key] = JSON.stringify(val);
-                      }
-                  } else {
-                      resolvedContext[key] = val;
-                  }
-              });
-          }
+    * {
+      box-sizing: border-box;
+    }
+
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      border-left: 3px double var(--pc98-border, #5555aa);
+      border-right: 3px double var(--pc98-border, #5555aa);
+      background-color: var(--pc98-bg, #000022);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* =========================================================================
+       FIXED HEADER (TOP)
+       ========================================================================= */
+    #fixed-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 28px;
+      padding: 16px 28px;
+      background-color: var(--pc98-dark-gray, #222244);
+      border-bottom: 4px double var(--pc98-border, #5555aa);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+      z-index: 100;
+      min-height: 380px;
+      font-size: calc(var(--aida-font-size-base) + 5.33px); /* Increased default font size of header by 4pt (~5.33px) */
+    }
+
+    /* Left Pane: Host Info & Status Readout below it */
+    .header-left-pane {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .header-sysinfo {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sysinfo-title-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .sys-badge {
+      color: var(--pc98-amber, #ffb700);
+      font-size: 1em;
+      font-weight: bold;
+    }
+
+    .sys-title {
+      color: var(--pc98-green, #55ff55);
+      font-size: 1.2em;
+      font-weight: bold;
+      text-shadow: 0 0 6px var(--pc98-green, #55ff55);
+      letter-spacing: 0.5px;
+    }
+
+    .sysinfo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 24px;
+      row-gap: 6px;
+      font-size: 0.88em;
+      line-height: 1.35;
+    }
+
+    .spec-item .k {
+      color: var(--pc98-cyan, #00ffff);
+      margin-right: 6px;
+    }
+
+    .spec-item .v {
+      color: var(--pc98-fg, #d4d4d4);
+    }
+
+    .health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 10px;
+      border: 1px solid var(--pc98-border, #5555aa);
+      background-color: #000000;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      font-size: 0.88em;
+    }
+
+    .health-badge.nominal {
+      color: var(--pc98-green, #55ff55);
+      border-color: var(--pc98-green, #55ff55);
+    }
+
+    .health-badge.warning {
+      color: var(--pc98-amber, #ffb700);
+      border-color: var(--pc98-amber, #ffb700);
+    }
+
+    .health-badge.critical {
+      color: var(--pc98-red, #ff5555);
+      border-color: var(--pc98-red, #ff5555);
+    }
+
+    /* Operational Status Readout - Placed below System Info (Multi-line 3 lines) */
+    .header-status-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .status-panel-label {
+      font-size: 0.82em;
+      color: var(--pc98-cyan, #00ffff);
+      text-shadow: 0 0 4px var(--pc98-cyan, #00ffff);
+      letter-spacing: 1px;
+    }
+
+    .status-lcd-bezel {
+      position: relative;
+      background-color: #000010;
+      border: 2px inset var(--pc98-border, #5555aa);
+      padding: 10px 16px;
+      height: calc(1.4em * 3 + 20px);
+      min-height: calc(1.4em * 3 + 20px);
+      max-height: calc(1.4em * 3 + 20px);
+      display: flex;
+      align-items: flex-start;
+      overflow: hidden;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.9);
+    }
+
+    .status-lcd-scanline {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,0.35) 0px, rgba(0,0,0,0.35) 1px, transparent 1px, transparent 2px);
+      pointer-events: none;
+    }
+
+    .status-lcd-text {
+      color: var(--pc98-green, #55ff55);
+      text-shadow: 0 0 8px var(--pc98-green, #55ff55);
+      font-size: 1.05em;
+      line-height: 1.4;
+      letter-spacing: 0.5px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      z-index: 1;
+      width: 100%;
+      animation: textPulse 2s infinite alternate ease-in-out;
+    }
+
+    @keyframes textPulse {
+      from { opacity: 0.9; }
+      to { opacity: 1; text-shadow: 0 0 12px var(--pc98-green, #55ff55); }
+    }
+
+    /* Right: AIDA Avatar Column - 2x Size */
+    .header-avatar-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .avatar-name {
+      color: var(--pc98-green, #55ff55);
+      font-size: 1.15em;
+      font-weight: bold;
+      text-shadow: 0 0 6px var(--pc98-green, #55ff55);
+      letter-spacing: 1.5px;
+      text-align: center;
+    }
+
+    .avatar-frame {
+      width: 280px;
+      height: 280px;
+      min-width: 280px;
+      min-height: 280px;
+      border: 4px ridge var(--pc98-border, #5555aa);
+      background-color: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      image-rendering: pixelated;
+      box-shadow: 0 0 16px rgba(85, 85, 170, 0.7);
+    }
+
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      image-rendering: pixelated;
+    }
+
+    .avatar-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 4px 14px;
+      border: 1px solid var(--pc98-border, #5555aa);
+      background-color: #000000;
+      font-size: 0.88em;
+      font-weight: bold;
+      text-align: center;
+      min-width: 180px;
+    }
+
+    .header-btns {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .hdr-btn {
+      padding: 4px 14px;
+      background-color: var(--pc98-bg, #000022);
+      color: var(--pc98-cyan, #00ffff);
+      border: 1px solid var(--pc98-border, #5555aa);
+      font-family: 'VT323', monospace;
+      font-size: 0.88em;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .hdr-btn:hover {
+      background-color: var(--pc98-cyan, #00ffff);
+      color: #000000;
+    }
+
+    .hdr-btn.active {
+      background-color: var(--pc98-green, #55ff55);
+      color: #000000;
+      border-color: var(--pc98-green, #55ff55);
+    }
+
+    /* Glowing Pulse Dot */
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .pulse-dot.nominal {
+      background-color: var(--pc98-green, #55ff55);
+      box-shadow: 0 0 6px var(--pc98-green, #55ff55);
+      animation: pulseGreen 1.5s infinite;
+    }
+
+    .pulse-dot.warning, .pulse-dot.thinking {
+      background-color: var(--pc98-amber, #ffb700);
+      box-shadow: 0 0 6px var(--pc98-amber, #ffb700);
+      animation: pulseAmber 1s infinite;
+    }
+
+    .pulse-dot.critical, .pulse-dot.error {
+      background-color: var(--pc98-red, #ff5555);
+      box-shadow: 0 0 6px var(--pc98-red, #ff5555);
+      animation: pulseRed 0.8s infinite;
+    }
+
+    @keyframes pulseGreen {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    @keyframes pulseAmber {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.8); }
+    }
+
+    @keyframes pulseRed {
+      0%, 100% { opacity: 1; transform: scale(1.1); }
+      50% { opacity: 0.3; transform: scale(0.75); }
+    }
+
+    /* =========================================================================
+       FREE CANVAS / CONVERSATION STREAM (BOTTOM)
+       ========================================================================= */
+    #canvas-viewport {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background-color: var(--pc98-bg, #000022);
+      scrollbar-width: thin;
+      scrollbar-color: var(--pc98-border, #5555aa) #000011;
+    }
+
+    #canvas-viewport::-webkit-scrollbar {
+      width: 8px;
+    }
+    #canvas-viewport::-webkit-scrollbar-track {
+      background: #000011;
+    }
+    #canvas-viewport::-webkit-scrollbar-thumb {
+      background: var(--pc98-border, #5555aa);
+    }
+
+    /* Empty State Landing */
+    .empty-state {
+      margin: auto;
+      text-align: center;
+      max-width: 650px;
+      border: 3px double var(--pc98-border, #5555aa);
+      background-color: var(--pc98-dark-gray, #222244);
+      padding: 30px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+    }
+
+    .empty-banner {
+      color: var(--pc98-green, #55ff55);
+      font-size: calc(var(--aida-font-size-base) * 1.2);
+      font-weight: bold;
+      text-shadow: 0 0 8px var(--pc98-green, #55ff55);
+      margin-bottom: 12px;
+    }
+
+    .empty-hint {
+      color: var(--pc98-fg, #d4d4d4);
+      font-size: calc(var(--aida-font-size-base) * 0.9);
+      margin-bottom: 20px;
+    }
+
+    .quick-prompts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .quick-btn {
+      padding: 10px;
+      background-color: #000000;
+      color: var(--pc98-cyan, #00ffff);
+      border: 2px solid var(--pc98-border, #5555aa);
+      font-family: 'VT323', monospace;
+      font-size: calc(var(--aida-font-size-base) * 0.85);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .quick-btn:hover {
+      background-color: var(--pc98-cyan, #00ffff);
+      color: #000000;
+      border-color: #ffffff;
+    }
+
+    /* Turn Entries */
+    .turn-card {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 14px 18px;
+      border: 2px solid var(--pc98-border, #5555aa);
+      background-color: #000016;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .turn-card.user-turn {
+      border-color: var(--pc98-cyan, #00ffff);
+      background-color: rgba(0, 255, 255, 0.03);
+    }
+
+    .turn-card.agent-turn {
+      border-color: var(--pc98-border, #5555aa);
+      background-color: var(--pc98-dark-gray, #222244);
+    }
+
+    .turn-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(85, 85, 170, 0.4);
+      padding-bottom: 6px;
+      font-size: calc(var(--aida-font-size-base) * 0.8);
+    }
+
+    .turn-prefix {
+      font-weight: bold;
+    }
+
+    .user-turn .turn-prefix {
+      color: var(--pc98-cyan, #00ffff);
+      text-shadow: 0 0 4px var(--pc98-cyan, #00ffff);
+    }
+
+    .agent-turn .turn-prefix {
+      color: var(--pc98-green, #55ff55);
+      text-shadow: 0 0 4px var(--pc98-green, #55ff55);
+    }
+
+    .turn-time {
+      color: var(--pc98-border, #5555aa);
+      font-size: calc(var(--aida-font-size-base) * 0.7);
+    }
+
+    .turn-body {
+      font-size: var(--aida-font-size-base);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .turn-body.user-body {
+      color: var(--pc98-cyan, #00ffff);
+      font-size: calc(var(--aida-font-size-base) * 1.05);
+    }
+
+    .turn-body.agent-body {
+      color: var(--pc98-fg, #d4d4d4);
+    }
+
+    /* Markdown styling inside Agent Turns */
+    .agent-body p {
+      margin: 4px 0 8px 0;
+    }
+
+    .agent-body code {
+      font-family: 'VT323', monospace;
+      font-size: inherit;
+      background-color: #000000;
+      color: var(--pc98-cyan, #00ffff);
+      padding: 2px 6px;
+      border: 1px solid var(--pc98-border, #5555aa);
+    }
+
+    .agent-body pre {
+      font-family: 'VT323', monospace;
+      font-size: inherit;
+      background-color: #000000;
+      color: var(--pc98-green, #55ff55);
+      padding: 12px;
+      border: 2px solid var(--pc98-border, #5555aa);
+      overflow-x: auto;
+      margin: 8px 0;
+      white-space: pre-wrap;
+    }
+
+    .agent-body pre code {
+      background: none;
+      padding: 0;
+      border: none;
+      color: inherit;
+    }
+
+    .agent-body strong, .agent-body b {
+      color: var(--pc98-green, #55ff55);
+      font-weight: bold;
+    }
+
+    .agent-body ul, .agent-body ol {
+      margin: 4px 0 8px 20px;
+      padding: 0;
+    }
+
+    /* Inline A2UI Surfaces Container */
+    .turn-inline-surfaces {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .inline-surface-card {
+      border: 3px ridge var(--pc98-border, #5555aa);
+      background-color: #000000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+    }
+
+    .inline-surface-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background-color: var(--pc98-dark-gray, #222244);
+      border-bottom: 2px solid var(--pc98-border, #5555aa);
+    }
+
+    .inline-surface-title {
+      color: var(--pc98-green, #55ff55);
+      font-size: calc(var(--aida-font-size-base) * 0.8);
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+
+    .surface-close-btn {
+      padding: 2px 8px;
+      background-color: var(--pc98-bg, #000022);
+      color: var(--pc98-red, #ff5555);
+      border: 1px solid var(--pc98-red, #ff5555);
+      font-family: 'VT323', monospace;
+      font-size: calc(var(--aida-font-size-base) * 0.75);
+      cursor: pointer;
+    }
+
+    .surface-close-btn:hover {
+      background-color: var(--pc98-red, #ff5555);
+      color: #000000;
+    }
+
+    .inline-surface-body {
+      padding: 12px;
+      background-color: #000000;
+      overflow-x: auto;
+    }
+
+    /* =========================================================================
+       DIAGNOSTIC LOG DRAWER (COLLAPSIBLE)
+       ========================================================================= */
+    #diagnostic-drawer {
+      flex-shrink: 0;
+      height: 160px;
+      display: flex;
+      flex-direction: column;
+      background-color: #000010;
+      border-top: 3px ridge var(--pc98-border, #5555aa);
+      border-bottom: 2px solid var(--pc98-border, #5555aa);
+    }
+
+    .drawer-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 12px;
+      background-color: var(--pc98-dark-gray, #222244);
+      color: var(--pc98-cyan, #00ffff);
+      font-size: calc(var(--aida-font-size-base) * 0.75);
+      font-weight: bold;
+    }
+
+    .drawer-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 8px 12px;
+      font-size: calc(var(--aida-font-size-base) * 0.75);
+      line-height: 1.25;
+      color: var(--pc98-green, #55ff55);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .log-entry.error {
+      color: var(--pc98-red, #ff5555);
+    }
+
+    .log-time {
+      color: var(--pc98-border, #5555aa);
+      margin-right: 8px;
+    }
+
+    /* =========================================================================
+       PROMPT INPUT BAR (BOTTOM PINNED)
+       ========================================================================= */
+    #input-footer {
+      flex-shrink: 0;
+      border-top: 4px double var(--pc98-border, #5555aa);
+      background-color: var(--pc98-dark-gray, #222244);
+      padding: 12px 18px;
+      box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.6);
+      z-index: 100;
+    }
+
+    #user-input {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+
+    #prompt-symbol {
+      color: var(--pc98-green, #55ff55);
+      font-size: calc(var(--aida-font-size-base) * 1.15);
+      font-weight: bold;
+      text-shadow: 0 0 6px var(--pc98-green, #55ff55);
+      flex-shrink: 0;
+    }
+
+    #message-text {
+      flex: 1;
+      background-color: #000000;
+      border: 2px solid var(--pc98-border, #5555aa);
+      color: var(--pc98-green, #55ff55);
+      font-family: 'VT323', monospace;
+      font-size: var(--aida-font-size-base);
+      padding: 8px 12px;
+      outline: none;
+      min-width: 0;
+      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+    }
+
+    #message-text:focus {
+      border-color: var(--pc98-cyan, #00ffff);
+      box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+    }
+
+    #message-text::placeholder {
+      color: var(--pc98-border, #5555aa);
+    }
+
+    #submit-btn {
+      padding: 8px 18px;
+      background-color: var(--pc98-bg, #000022);
+      color: var(--pc98-green, #55ff55);
+      border: 2px solid var(--pc98-green, #55ff55);
+      font-family: 'VT323', monospace;
+      font-size: calc(var(--aida-font-size-base) * 0.9);
+      font-weight: bold;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    #submit-btn:hover:not(:disabled) {
+      background-color: var(--pc98-green, #55ff55);
+      color: #000000;
+    }
+
+    #submit-btn:disabled, #message-text:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 900px) {
+      #fixed-header {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 10px 14px;
+        min-height: auto;
       }
-
-      let responseText = "";
-      if (Object.keys(resolvedContext).length > 0) {
-          responseText = `Action: ${actionName}\nContext:\n`;
-          Object.keys(resolvedContext).forEach(k => {
-              responseText += `- ${k}: ${resolvedContext[k]}\n`;
-          });
-          responseText = responseText.trim();
-      } else {
-          responseText = actionName;
+      .avatar-frame {
+        width: 120px;
+        height: 120px;
+        min-width: 120px;
+        min-height: 120px;
       }
-
-      this.logActivity(`INTERACTION SUBMITTED: ${actionName}`);
-      this.sendMessage(responseText, showInUi);
-    });
-
-    this.processor.onSurfaceCreated((surface: any) => {
-      this.activeSurfaces = new Map(this.activeSurfaces.set(surface.id, surface));
-      
-      // Force Lit re-renders when components are created, deleted, or properties are updated
-      surface.componentsModel.onCreated.subscribe((comp: any) => {
-          this.activeSurfaces = new Map(this.activeSurfaces);
-          if (comp && comp.onUpdated) {
-              comp.onUpdated.subscribe(() => {
-                  this.activeSurfaces = new Map(this.activeSurfaces);
-              });
-          }
-      });
-      surface.componentsModel.onDeleted.subscribe(() => {
-          this.activeSurfaces = new Map(this.activeSurfaces);
-      });
-    });
-
-    this.processor.onSurfaceDeleted((surfaceId: any) => {
-      const next = new Map(this.activeSurfaces);
-      next.delete(surfaceId);
-      this.activeSurfaces = next;
-    });
-  }
+      .header-sysinfo {
+        min-width: 100%;
+        order: 2;
+      }
+      .header-status-panel {
+        max-width: 100%;
+        order: 3;
+      }
+      .header-avatar-col {
+        order: 1;
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  `;
 
   constructor() {
     super();
-    this.messages = [
-      { role: 'agent', content: 'Please state the nature of the diagnostic emergency.' }
-    ];
-    this.logActivity('AIDA AGENT READY.', true);
     this.initProcessor();
-  }
-
-  willUpdate(changedProperties: Map<PropertyKey, unknown>) {
-    if (changedProperties.has('avatarState')) {
-        this.cacheBuster = Date.now();
-    }
   }
 
   connectedCallback() {
     super.connectedCallback();
-
-    // Handle JRPG dialogue updates dispatched from AIDA's A2UI components
-    this.addEventListener('aida-dialogue-rendered', (e: any) => {
-        const props = e.detail;
-        this.dialogueText = props.text;
-        
-        // Map avatarUrl to state unambiguously using endsWith
-        const url = (props.avatarUrl || "").toLowerCase();
-        if (url.endsWith('talk') || url.endsWith('talk.png')) this.avatarState = 'talk';
-        else if (url.endsWith('think_blink') || url.endsWith('think_blink.png')) this.avatarState = 'think_blink';
-        else if (url.endsWith('think') || url.endsWith('think.png')) this.avatarState = 'think';
-        else if (url.endsWith('error') || url.endsWith('error.png')) this.avatarState = 'error';
-        else if (url.endsWith('blink') || url.endsWith('blink.png')) this.avatarState = 'blink';
-        else this.avatarState = 'idle';
-
-        if (props.type === 'error') {
-            this.avatarLabelText = 'STATUS: ERROR';
-            this.avatarLabelColor = 'var(--pc98-red)';
-        } else if (props.type === 'warning') {
-            this.avatarLabelText = 'STATUS: WARNING';
-            this.avatarLabelColor = 'var(--pc98-amber)';
-        } else {
-            this.avatarLabelText = 'STATUS: ONLINE';
-            this.avatarLabelColor = 'var(--pc98-green)';
-        }
-    });
-
     this.startBlinking();
-    this.updateContextMeter();
+    this.fetchSystemStatus();
+    this.logActivity('AIDA RETRO SYSTEM ONLINE. AWAITING DIAGNOSTIC TELEMETRY.');
 
-    const params = new URLSearchParams(window.location.search);
-    const queryParam = params.get('query');
-    if (queryParam) {
-        setTimeout(() => {
-            this.sendMessage(queryParam);
-        }, 1000);
+    // Status polling every 15 seconds
+    this.statusPollTimer = setInterval(() => {
+      this.fetchSystemStatus();
+    }, 15000);
+
+    // Initial greeting turn if no turns yet
+    if (this.turns.length === 0) {
+      this.turns = [
+        {
+          id: 'turn-init',
+          role: 'agent',
+          content: 'EMERGENCY DIAGNOSTIC AGENT READY. State your system emergency or query to begin telemetry analysis.',
+          timestamp: this.formatTime(),
+          surfaceIds: []
+        }
+      ];
     }
   }
-  
+
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.stopAnimation();
+    this.stopTalkingAnimation();
     this.stopBlinking();
+    if (this.statusPollTimer) {
+      clearInterval(this.statusPollTimer);
+      this.statusPollTimer = null;
+    }
   }
 
-  private logActivity(message: string, isSystem = false, type: 'normal'|'error' = 'normal') {
-      const now = new Date();
-      const timeStr = `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
-      this.logs = [...this.logs, { time: timeStr, sys: isSystem, content: message, type }];
-      setTimeout(() => {
-        if (this.logsContainer) this.logsContainer.scrollTop = this.logsContainer.scrollHeight;
-      }, 50);
-  }
+  private initProcessor() {
+    this.processor = new MessageProcessor([basicCatalog, aidaCustomCatalog], (action: any) => {
+      console.log('A2UI ACTION TRIGGERED:', action);
 
-  private async updateContextMeter() {
-      try {
-          const response = await fetch('/session/usage');
-          const data = await response.json();
-          if (data.status === 'ok') {
-              let percentage = (data.tokens_used / data.max_tokens) * 100;
-              this.contextPercentage = Math.min(percentage, 100);
-              this.contextText = `${percentage.toFixed(1)}% (${data.tokens_used} / ${data.max_tokens})`;
-          }
-      } catch (e) {
-          console.error("Failed to update context meter", e);
-      }
-  }
+      let actionName = 'submit';
+      let resolvedContext: any = {};
 
-  private startBlinking() {
-      this.stopBlinking();
-      const scheduleNextBlink = () => {
-          const randomDelay = 2000 + Math.random() * 4000; // Random interval between 2s and 6s
-          this.thinkBlinkInterval = setTimeout(() => {
-              if (this.avatarState === 'idle') {
-                  this.avatarState = 'blink';
-                  setTimeout(() => {
-                      if (this.avatarState === 'blink') {
-                          this.avatarState = 'idle';
-                      }
-                      scheduleNextBlink();
-                  }, 150);
-              } else {
-                  scheduleNextBlink();
-              }
-          }, randomDelay);
-      };
-      scheduleNextBlink();
-  }
+      if (typeof action === 'string') {
+        actionName = action;
+      } else if (action && typeof action === 'object') {
+        const payload = action.action || action;
+        actionName = payload.name || (payload.event && payload.event.name) || 'submit';
+        const contextObj = payload.context || (payload.event && payload.event.context) || payload;
 
-  private stopBlinking() {
-      if (this.thinkBlinkInterval) {
-          clearTimeout(this.thinkBlinkInterval);
-          clearInterval(this.thinkBlinkInterval); // Also clear in case any interval is running
-          this.thinkBlinkInterval = null;
-      }
-  }
-
-  private startTalkingAnimation() {
-      if (this.animationInterval) return;
-      this.stopBlinking();
-      let toggle = false;
-      this.avatarState = 'talk';
-      this.avatarLabelText = "STATUS: RESPONDING";
-      this.avatarLabelColor = "var(--pc98-green)";
-      this.animationInterval = setInterval(() => {
-          toggle = !toggle;
-          this.avatarState = toggle ? 'talk' : 'idle';
-      }, 150);
-  }
-
-  private stopAnimation() {
-      this.stopBlinking();
-      if (this.animationInterval) {
-          clearInterval(this.animationInterval);
-          this.animationInterval = null;
-      }
-      this.avatarState = 'idle';
-      this.avatarLabelText = "STATUS: ONLINE";
-      this.avatarLabelColor = "var(--pc98-green)";
-      this.currentTask = null; // Clear active task on turn end!
-      this.logActivity("AGENT STATUS: IDLE.");
-      this.startBlinking();
-  }
-
-  private async handleCommand(query: string): Promise<boolean> {
-      if (query.startsWith('/model ')) {
-          const modelId = query.split(' ')[1];
-          this.logActivity(`COMMAND: SWITCHING MODEL TO '${modelId}'...`);
-          try {
-              const response = await fetch('/config/model', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ model_id: modelId })
-              });
-              const data = await response.json();
-              if (data.status === 'ok') {
-                  this.logActivity(`SUCCESS: MODEL SWITCHED TO ${data.current_model}`);
-                  this.activeModel = modelId;
-                  this.messages = [...this.messages, { role: 'system', content: '[SYSTEM] Model switched successfully.' }];
-                  this.updateContextMeter();
-              } else {
-                  this.logActivity(`ERROR: ${data.error}`, false, 'error');
-                  this.messages = [...this.messages, { role: 'system', content: `[SYSTEM] Error: ${data.error}` }];
-              }
-          } catch (e) {
-              this.logActivity(`ERROR: FAILED TO SWITCH MODEL`, false, 'error');
-          }
-          return true;
-      }
-
-      if (query === '/clear') {
-          this.logActivity("COMMAND: CLEARING SESSION MEMORY...");
-          try {
-               const response = await fetch('/session/clear', { method: 'POST' });
-               const data = await response.json();
-               this.logActivity(`SUCCESS: ${data.message}`);
-               this.messages = []; // Clear chat window
-               this.processedA2uiBlocks.clear(); // Clear processed A2UI blocks
-               this.updateContextMeter(); 
-          } catch (e) {
-               this.logActivity("ERROR: FAILED TO CLEAR SESSION", false, 'error');
-          }
-          return true;
-      }
-
-      if (query === '/debug') {
-          this.logActivity("COMMAND: TOGGLING DEBUG MODE...");
-          this.debugMode = !this.debugMode;
-          return true;
-      }
-
-      if (query === '/logs') {
-          this.showLogs = !this.showLogs;
-          this.logActivity(`COMMAND: TOGGLED SYSTEM LOGS: ${this.showLogs ? 'VISIBLE' : 'HIDDEN'}`);
-          return true;
-      }
-
-      if (query === '/model') {
-          this.showModelPanel = !this.showModelPanel;
-          this.logActivity(`COMMAND: TOGGLED MODEL PANEL: ${this.showModelPanel ? 'VISIBLE' : 'HIDDEN'}`);
-          return true;
-      }
-
-      if (query === '/memory') {
-          this.showMemoryPanel = !this.showMemoryPanel;
-          this.logActivity(`COMMAND: TOGGLED MEMORY PANEL: ${this.showMemoryPanel ? 'VISIBLE' : 'HIDDEN'}`);
-          return true;
-      }
-
-      return false;
-  }
-
-  private getTaskSummary(text: string): string {
-      const query = text.toLowerCase().trim();
-      if (query.includes('cpu') || query.includes('core')) return 'Analyzing CPU Core Utilization...';
-      if (query.includes('memory') || query.includes('ram') || query.includes('swap')) return 'Analyzing System Memory Allocation...';
-      if (query.includes('disk') || query.includes('volume') || query.includes('space') || query.includes('storage')) return 'Analyzing Disk Storage Volumes...';
-      if (query.includes('network') || query.includes('interface') || query.includes('rx') || query.includes('tx')) return 'Monitoring Network Interface Throughput...';
-      if (query.includes('process') || query.includes('ps')) return 'Querying Active System Processes...';
-      if (query.includes('log') || query.includes('syslog') || query.includes('error')) return 'Querying System Diagnostic Logs...';
-      if (query.includes('table') || query.includes('schema')) return 'Searching System Schema Tables...';
-      return 'Analyzing System Diagnostics...';
-  }
-
-  private async sendMessage(text: string, showInUi = true) {
-      if (!text.trim()) return;
-
-      this.currentTask = this.getTaskSummary(text);
-
-      if (showInUi) {
-          this.messages = [...this.messages, { role: 'user', content: `> ${text}` }];
-      }
-      if (this.inputEl && showInUi) this.inputEl.value = '';
-
-      if (await this.handleCommand(text)) {
-          this.currentTask = null;
-          return;
-      }
-
-      // Reset A2UI processor state for a fresh, clean turn, accumulating surfaces
-      this.processedA2uiBlocks.clear();
-
-      this.logActivity(`INPUT RECEIVED: "${text.substring(0, 20)}${text.length > 20 ? '...' : ''}"`);
-
-      this.stopBlinking();
-      this.avatarState = 'think';
-      this.avatarLabelText = "STATUS: THINKING";
-      this.avatarLabelColor = "var(--pc98-cyan)";
-      this.dialogueText = "";
-      this.logActivity("AGENT STATUS: THINKING...");
-
-      this.thinkBlinkInterval = setInterval(() => {
-          this.avatarState = 'think_blink';
-          setTimeout(() => {
-              if (this.avatarLabelText === "STATUS: THINKING") {
-                  this.avatarState = 'think';
-              }
-          }, 300);
-      }, 3500);
-
-      try {
-          const response = await fetch('/chat', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: text })
+        if (Array.isArray(contextObj)) {
+          contextObj.forEach((ctx: any) => {
+            if (ctx && typeof ctx === 'object' && 'key' in ctx && 'value' in ctx) {
+              resolvedContext[ctx.key] = ctx.value;
+            }
           });
-
-          const reader = response.body?.getReader();
-          if (!reader) throw new Error("No reader");
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let fullMarkdown = "";
-
-          let currentAgentMessageIndex = this.messages.length;
-          this.messages = [...this.messages, { role: 'agent', content: 'Receiving transmission...' }];
-
-          const parser = new A2uiStreamParser(
-              (textChunk) => {
-                  this.dialogueText += textChunk;
-              },
-              (jsonStr) => {
-                  if (!this.processedA2uiBlocks.has(jsonStr)) {
-                      this.processedA2uiBlocks.add(jsonStr);
-                      try {
-                          const parsed = JSON.parse(jsonStr);
-                          this.processor.processMessages(parsed);
-                      } catch (e) {
-                          console.error("Error parsing client-side A2UI JSON:", e, jsonStr);
-                      }
-                  }
-              }
-          );
-
-          while (true) {
-              const { value, done } = await reader.read();
-              if (done) {
-                  parser.end();
-                  this.stopAnimation();
-                  this.updateContextMeter();
-                  break;
-              }
-              buffer += decoder.decode(value, { stream: true });
-              
-              let lineEnd;
-              while ((lineEnd = buffer.indexOf('\n')) !== -1) {
-                  const line = buffer.substring(0, lineEnd).trim();
-                  buffer = buffer.substring(lineEnd + 1);
-                  if (line) {
-                      try {
-                          const data = JSON.parse(line);
-                          if (data.type === 'log') {
-                              this.logActivity(data.content);
-                              if (data.content.includes("EXECUTING: run_osquery")) {
-                                  this.currentTask = "Executing osquery Diagnostic Database Query...";
-                              } else if (data.content.includes("EXECUTING: search_query_library")) {
-                                  this.currentTask = "Searching Query Library RAG database...";
-                              } else if (data.content.includes("EXECUTING: discover_schema")) {
-                                  this.currentTask = "Discovering table schema structures...";
-                              }
-                          } else if (data.type === 'tool_output') {
-                              if (this.debugMode) {
-                                  this.logActivity(`TOOL OUTPUT: ${data.content}`);
-                              }
-                          } else if (data.type === 'a2ui') {
-                              this.processor.processMessages(data.content);
-                          } else if (data.type === 'text') {
-                              this.startTalkingAnimation();
-                              fullMarkdown += data.content;
-                              parser.append(data.content);
-                              
-                              const newMessages = [...this.messages];
-                              newMessages[currentAgentMessageIndex] = { 
-                                  role: 'agent', 
-                                  content: fullMarkdown
-                              };
-                              this.messages = newMessages;
-                          }
-                      } catch (e) {
-                          console.error("Error parsing JSON line:", line, e);
-                      }
-                  }
-              }
-          }
-
-      } catch (e) {
-          clearInterval(this.thinkBlinkInterval);
-          this.currentTask = null;
-          this.avatarState = 'error';
-          this.avatarLabelText = "STATUS: ERROR";
-          this.avatarLabelColor = "var(--pc98-red)";
-          this.dialogueText = "ERROR: Connection with the diagnostic server was interrupted.";
-          this.logActivity("ERROR: CONNECTION LOST!", false, "error");
-          
-          let currentAgentMessageIndex = this.messages.length - 1;
-          const newMessages = [...this.messages];
-          newMessages[currentAgentMessageIndex] = { 
-              role: 'agent', 
-              content: "ERROR: CONNECTION LOST" 
-          };
-          this.messages = newMessages;
+        } else if (contextObj && typeof contextObj === 'object') {
+          Object.keys(contextObj).forEach(key => {
+            if (['name', 'event', 'surfaceId', 'sourceComponentId', 'timestamp', 'version', 'action'].includes(key)) {
+              return;
+            }
+            resolvedContext[key] = contextObj[key];
+          });
+        }
       }
-  }
 
-  private handleSubmit(e: Event) {
-      e.preventDefault();
-      this.sendMessage(this.inputEl.value);
-  }
+      let responseText = actionName;
+      if (Object.keys(resolvedContext).length > 0) {
+        responseText = `Action: ${actionName}\nContext:\n` +
+          Object.keys(resolvedContext).map(k => `- ${k}: ${JSON.stringify(resolvedContext[k])}`).join('\n');
+      }
 
-  private closeSurface(surfaceId: string) {
+      this.logActivity(`INTERACTION SUBMITTED: ${actionName}`);
+      this.sendMessage(responseText, false);
+    });
+
+    this.processor.onSurfaceCreated((surface: any) => {
+      this.activeSurfaces = new Map(this.activeSurfaces.set(surface.id, surface));
+
+      // Associate with current active agent turn
+      if (this.activeAgentTurnId) {
+        const turnIndex = this.turns.findIndex(t => t.id === this.activeAgentTurnId);
+        if (turnIndex !== -1) {
+          const turn = this.turns[turnIndex];
+          if (!turn.surfaceIds.includes(surface.id)) {
+            const updatedTurns = [...this.turns];
+            updatedTurns[turnIndex] = {
+              ...turn,
+              surfaceIds: [...turn.surfaceIds, surface.id]
+            };
+            this.turns = updatedTurns;
+          }
+        }
+      }
+
+      // Re-render when components change
+      surface.componentsModel.onCreated.subscribe((comp: any) => {
+        this.activeSurfaces = new Map(this.activeSurfaces);
+        this.requestUpdate();
+        if (comp && comp.onUpdated) {
+          comp.onUpdated.subscribe(() => {
+            this.activeSurfaces = new Map(this.activeSurfaces);
+            this.requestUpdate();
+          });
+        }
+      });
+      surface.componentsModel.onDeleted.subscribe(() => {
+        this.activeSurfaces = new Map(this.activeSurfaces);
+        this.requestUpdate();
+      });
+    });
+
+    this.processor.onSurfaceDeleted((surfaceId: string) => {
       const next = new Map(this.activeSurfaces);
       next.delete(surfaceId);
       this.activeSurfaces = next;
-      this.logActivity(`DISMISSED SURFACE '${surfaceId}'.`);
+      this.requestUpdate();
+    });
+  }
+
+  // --- System Status Polling ---
+  private async fetchSystemStatus() {
+    try {
+      const res = await fetch('/api/system-status');
+      if (res.ok) {
+        const data = await res.json();
+        this.systemStatus = {
+          hostname: data.hostname || this.systemStatus.hostname,
+          os: data.os || this.systemStatus.os,
+          kernel: data.kernel || this.systemStatus.kernel,
+          uptime: data.uptime || this.systemStatus.uptime,
+          health: (data.health || 'NOMINAL').toUpperCase() as any,
+          cpu: data.cpu,
+          memory: data.memory
+        };
+      }
+    } catch {
+      // Retain fallback defaults smoothly
+    }
+  }
+
+  // --- Avatar Animation & States ---
+  private startBlinking() {
+    this.stopBlinking();
+    const scheduleNextBlink = () => {
+      const delay = 2500 + Math.random() * 3500;
+      this.thinkBlinkInterval = setTimeout(() => {
+        if (this.avatarState === 'idle') {
+          this.avatarState = 'blink';
+          this.cacheBuster = Date.now();
+          setTimeout(() => {
+            if (this.avatarState === 'blink') {
+              this.avatarState = 'idle';
+              this.cacheBuster = Date.now();
+            }
+            scheduleNextBlink();
+          }, 150);
+        } else {
+          scheduleNextBlink();
+        }
+      }, delay);
+    };
+    scheduleNextBlink();
+  }
+
+  private stopBlinking() {
+    if (this.thinkBlinkInterval) {
+      clearTimeout(this.thinkBlinkInterval);
+      this.thinkBlinkInterval = null;
+    }
+  }
+
+  private startTalkingAnimation() {
+    if (this.animationInterval) return;
+    this.stopBlinking();
+    let toggle = false;
+    this.avatarState = 'talk';
+    this.avatarLabelText = 'RESPONDING';
+    this.avatarLabelColor = 'var(--pc98-green)';
+    this.cacheBuster = Date.now();
+
+    this.animationInterval = setInterval(() => {
+      toggle = !toggle;
+      this.avatarState = toggle ? 'talk' : 'idle';
+      this.cacheBuster = Date.now();
+    }, 150);
+  }
+
+  private stopTalkingAnimation() {
+    if (this.animationInterval) {
+      clearInterval(this.animationInterval);
+      this.animationInterval = null;
+    }
+  }
+
+  private setIdleState() {
+    this.stopTalkingAnimation();
+    this.avatarState = 'idle';
+    this.avatarLabelText = 'ONLINE';
+    this.avatarLabelColor = 'var(--pc98-green)';
+    this.statusBarText = 'IDLE - AWAITING INPUT';
+    this.isStreaming = false;
+    this.cacheBuster = Date.now();
+    this.startBlinking();
+  }
+
+  private setThinkingState() {
+    this.stopTalkingAnimation();
+    this.stopBlinking();
+    this.avatarState = 'think';
+    this.avatarLabelText = 'THINKING';
+    this.avatarLabelColor = 'var(--pc98-amber)';
+    this.statusBarText = 'THINKING...';
+    this.cacheBuster = Date.now();
+  }
+
+  private setErrorState(message: string) {
+    this.stopTalkingAnimation();
+    this.stopBlinking();
+    this.avatarState = 'error';
+    this.avatarLabelText = 'ERROR';
+    this.avatarLabelColor = 'var(--pc98-red)';
+    this.statusBarText = 'ERROR - TRANSMISSION INTERRUPTED';
+    this.isStreaming = false;
+    this.cacheBuster = Date.now();
+    this.logActivity(`ERROR: ${message}`, 'error');
+  }
+
+  private formatTime(): string {
+    const d = new Date();
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+  }
+
+  private logActivity(content: string, type: 'normal' | 'error' = 'normal') {
+    this.logs = [...this.logs, { time: `[${this.formatTime()}]`, content, type }];
+    setTimeout(() => {
+      if (this.logWindow) {
+        this.logWindow.scrollTop = this.logWindow.scrollHeight;
+      }
+    }, 50);
+  }
+
+  private scrollCanvasToBottom() {
+    setTimeout(() => {
+      if (this.canvasViewport) {
+        this.canvasViewport.scrollTop = this.canvasViewport.scrollHeight;
+      }
+    }, 50);
+  }
+
+  // --- User Message Transmission ---
+  private async sendMessage(text: string, showInUi = true) {
+    const trimmed = text.trim();
+    if (!trimmed || this.isStreaming) return;
+
+    if (this.inputEl && showInUi) {
+      this.inputEl.value = '';
+    }
+
+    // Add user turn if requested
+    if (showInUi) {
+      const userTurn: ChatTurn = {
+        id: `turn-${Date.now()}-user`,
+        role: 'user',
+        content: trimmed,
+        timestamp: this.formatTime(),
+        surfaceIds: []
+      };
+      this.turns = [...this.turns, userTurn];
+      this.scrollCanvasToBottom();
+    }
+
+    // Create a new agent turn to hold streaming response & surfaces
+    const agentTurnId = `turn-${Date.now()}-agent`;
+    this.activeAgentTurnId = agentTurnId;
+    const agentTurn: ChatTurn = {
+      id: agentTurnId,
+      role: 'agent',
+      content: '',
+      timestamp: this.formatTime(),
+      status: 'RECEIVING TRANSMISSION...',
+      surfaceIds: []
+    };
+    this.turns = [...this.turns, agentTurn];
+    this.scrollCanvasToBottom();
+
+    this.isStreaming = true;
+    this.setThinkingState();
+
+    this.abortController = new AbortController();
+
+    // Invoke clean typed protocol handler (ZERO REGEX!)
+    await streamAgentResponse(
+      trimmed,
+      {
+        onTextDelta: (delta: string) => {
+          this.startTalkingAnimation();
+          const turnIdx = this.turns.findIndex(t => t.id === agentTurnId);
+          if (turnIdx !== -1) {
+            const current = this.turns[turnIdx];
+            const updated = [...this.turns];
+            updated[turnIdx] = {
+              ...current,
+              content: current.content + delta,
+              status: undefined
+            };
+            this.turns = updated;
+            this.scrollCanvasToBottom();
+          }
+        },
+        onToolStart: (toolName: string) => {
+          this.setThinkingState();
+          this.logActivity(`EXECUTING TOOL: ${toolName}`);
+          if (toolName.includes('osquery')) {
+            this.statusBarText = 'EXECUTING QUERY: SELECT...';
+          } else if (toolName.includes('skill')) {
+            this.statusBarText = 'LOADING SKILL...';
+          } else {
+            this.statusBarText = `EXECUTING: ${toolName.toUpperCase()}...`;
+          }
+        },
+        onToolResult: () => {
+          this.setThinkingState();
+        },
+        onA2uiOperations: (ops: any[]) => {
+          try {
+            // Pre-process ops: if any surface already exists, delete it first to avoid duplicate surface errors
+            for (const op of ops) {
+              const sId = op.createSurface?.surfaceId;
+              if (sId && this.processor.model.getSurface(sId)) {
+                try {
+                  this.processor.processMessages([{ version: 'v0.9', deleteSurface: { surfaceId: sId } }]);
+                } catch (e) {
+                  console.warn('Could not reset existing surface:', e);
+                }
+              }
+              if (op.createSurface && !op.createSurface.catalogId) {
+                op.createSurface.catalogId = 'aida_custom';
+              }
+            }
+
+            this.processor.processMessages(ops);
+
+            // Associate referenced surfaceIds with current agent turn
+            if (this.activeAgentTurnId) {
+              const turnIndex = this.turns.findIndex(t => t.id === this.activeAgentTurnId);
+              if (turnIndex !== -1) {
+                const turn = this.turns[turnIndex];
+                const updatedSurfaceIds = new Set(turn.surfaceIds || []);
+                for (const op of ops) {
+                  const sId = op.createSurface?.surfaceId || op.updateComponents?.surfaceId || op.updateDataModel?.surfaceId;
+                  if (sId) updatedSurfaceIds.add(sId);
+                }
+                const updatedTurns = [...this.turns];
+                updatedTurns[turnIndex] = {
+                  ...turn,
+                  surfaceIds: Array.from(updatedSurfaceIds)
+                };
+                this.turns = updatedTurns;
+              }
+            }
+
+            // Sync surfaces into activeSurfaces Map
+            for (const op of ops) {
+              const sId = op.createSurface?.surfaceId || op.updateComponents?.surfaceId;
+              if (sId) {
+                const surface = this.processor.model.getSurface(sId);
+                if (surface) {
+                  this.activeSurfaces.set(sId, surface);
+                }
+              }
+            }
+
+            this.activeSurfaces = new Map(this.activeSurfaces);
+            this.requestUpdate();
+            this.logActivity(`A2UI OPERATIONS APPLIED (${ops.length} ops)`);
+          } catch (e: any) {
+            console.error('Failed to process A2UI operations:', e);
+            this.logActivity(`A2UI ERROR: ${e?.message || e}`, 'error');
+          }
+        },
+        onStatusChange: (statusText: string) => {
+          this.statusBarText = statusText;
+        },
+        onRunStarted: () => {
+          this.setThinkingState();
+        },
+        onRunFinished: () => {
+          this.setIdleState();
+          this.scrollCanvasToBottom();
+        },
+        onError: (err: string) => {
+          this.setErrorState(err);
+          const turnIdx = this.turns.findIndex(t => t.id === agentTurnId);
+          if (turnIdx !== -1) {
+            const current = this.turns[turnIdx];
+            const updated = [...this.turns];
+            updated[turnIdx] = {
+              ...current,
+              content: current.content ? `${current.content}\n\n[TRANSMISSION FAILED: ${err}]` : `[TRANSMISSION FAILED: ${err}]`,
+              status: 'ERROR'
+            };
+            this.turns = updated;
+          }
+        },
+        onLog: (logMsg: string) => {
+          this.logActivity(logMsg);
+        }
+      },
+      this.abortController.signal
+    );
+  }
+
+  private handleSubmit(e: Event) {
+    e.preventDefault();
+    this.sendMessage(this.inputEl.value);
+  }
+
+  private toggleLogs() {
+    this.showLogs = !this.showLogs;
+  }
+
+  private async clearSession() {
+    try {
+      await fetch('/session/clear', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    this.turns = [
+      {
+        id: `turn-${Date.now()}-reset`,
+        role: 'system',
+        content: '[SYSTEM MEMORY CLEARED. DIAGNOSTIC BUFFER RESET.]',
+        timestamp: this.formatTime(),
+        surfaceIds: []
+      }
+    ];
+    this.activeSurfaces.clear();
+    this.logActivity('SESSION MEMORY RESET BY OPERATOR.');
+    this.setIdleState();
+  }
+
+  private closeSurface(surfaceId: string) {
+    const next = new Map(this.activeSurfaces);
+    next.delete(surfaceId);
+    this.activeSurfaces = next;
+    this.logActivity(`DISMISSED SURFACE '${surfaceId}'.`);
   }
 
   private hasVisibleComponents(surface: any): boolean {
-      if (!surface || !surface.componentsModel) return false;
-      try {
-          const entries = Array.from(surface.componentsModel.entries);
-          for (const entry of entries) {
-              if (Array.isArray(entry) && entry[1]) {
-                  const comp = entry[1] as any;
-                  if (comp.type !== 'AidaDialogueBox' && comp.type !== 'Column' && comp.type !== 'Row') {
-                      return true;
-                  }
-              }
-          }
-      } catch (e) {
-          console.error("Error checking visible components", e);
-      }
-      return false;
+    if (!surface || !surface.componentsModel) return false;
+    try {
+      const entries = Array.from(surface.componentsModel.entries);
+      return entries.length > 0;
+    } catch {
+      return true;
+    }
   }
 
+  // --- Render Helpers ---
+  private cleanA2uiText(text: string): string {
+    if (!text) return '';
+    let cleaned = text.replace(/<a2ui[\s\S]*?<\/a2ui>/gi, '');
+    cleaned = cleaned.replace(/<a2ui[\s\S]*$/gi, '');
+    return cleaned.trim();
+  }
 
+  private renderAgentMarkdown(content: string) {
+    try {
+      const clean = this.cleanA2uiText(content);
+      if (!clean) return nothing;
+      const htmlStr = mdRenderer.render(clean);
+      return unsafeHTML(htmlStr);
+    } catch {
+      const clean = this.cleanA2uiText(content);
+      return clean ? html`<div>${clean}</div>` : nothing;
+    }
+  }
+
+  private renderTurn(turn: ChatTurn) {
+    return html`
+      <div class="turn-card ${turn.role}-turn">
+        <div class="turn-header">
+          <span class="turn-prefix">${turn.role === 'user' ? 'USER>' : turn.role === 'system' ? 'SYSTEM>' : 'AIDA>'}</span>
+          <span class="turn-time">${turn.timestamp}</span>
+        </div>
+
+        ${turn.role === 'user'
+          ? html`<div class="turn-body user-body">${turn.content}</div>`
+          : html`
+              <div class="turn-body agent-body">
+                ${turn.content ? this.renderAgentMarkdown(turn.content) : nothing}
+                ${this.renderInlineSurfaces(turn)}
+              </div>
+            `}
+      </div>
+    `;
+  }
+
+  private renderInlineSurfaces(turn: ChatTurn) {
+    if (!turn.surfaceIds || turn.surfaceIds.length === 0) return nothing;
+
+    const surfacesToRender = turn.surfaceIds
+      .map(id => this.activeSurfaces.get(id) || this.processor?.model?.getSurface(id))
+      .filter((s): s is any => !!s && this.hasVisibleComponents(s));
+
+    if (surfacesToRender.length === 0) return nothing;
+
+    return html`
+      <div class="turn-inline-surfaces">
+        ${surfacesToRender.map(surface => html`
+          <div class="inline-surface-card">
+            <div class="inline-surface-hdr">
+              <span class="inline-surface-title">[A2UI SURFACE: ${surface.id.toUpperCase()}]</span>
+              <button class="surface-close-btn" @click=${() => this.closeSurface(surface.id)}>[X] DISMISS</button>
+            </div>
+            <div class="inline-surface-body">
+              <a2ui-surface .surface=${surface}></a2ui-surface>
+            </div>
+          </div>
+        `)}
+      </div>
+    `;
+  }
 
   render() {
     return html`
-      <div id="main-container" class="a2ui-dark">
-          <div id="canvas-container">
-              <div class="canvas-title">*** EMERGENCY DIAGNOSTIC AGENT ***</div>
-              
-              <!-- Permanent JRPG-style dialogue box at the top of the workspace canvas -->
-              <div class="canvas-surface-container" style="margin-bottom: 20px; flex-shrink: 0;">
-                  <div class="canvas-surface-header">
-                      <span>SYSTEM DIALOGUE CONSOLE</span>
-                  </div>
-                  <div class="canvas-surface-body" style="display: flex; gap: 20px; align-items: flex-start; background-color: var(--pc98-dark-gray, #222244); padding: 15px;">
-                      <div style="display: flex; flex-direction: column; flex: 1; gap: 15px;">
-                          <div id="jrpg-bubble" style="border: 3px ridge var(--pc98-border); padding: 15px; background: var(--pc98-black, #000000);">
-                              <div class="character-name" style="color: var(--pc98-green); font-size: calc(var(--aida-font-size-base) * 0.83); font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid var(--pc98-border); padding-bottom: 3px;">AIDA</div>
-                              <div class="bubble-text">${this.dialogueText}</div>
-                          </div>
-                          ${this.currentTask ? html`
-                              <div style="border: 2px solid var(--pc98-cyan); padding: 10px 15px; background-color: var(--pc98-bg, #000022); color: var(--pc98-cyan); font-family: inherit; font-size: calc(var(--aida-font-size-base) * 0.83); display: flex; align-items: center; gap: 10px; flex-shrink: 0; line-height: 1.2; height: 39px;">
-                                  <span style="color: var(--pc98-amber); font-weight: bold; animation: blink 1.2s infinite;">[ACTIVE TASK]</span>
-                                  <span>${this.currentTask}</span>
-                              </div>
-                          ` : ''}
-                      </div>
-                      <div id="boot-avatar-pane" style="flex-shrink: 0; width: 256px; display: flex; flex-direction: column; gap: 15px;">
-                          <div id="avatar-window" style="width: 256px; height: 256px; border: 3px ridge var(--pc98-border);">
-                              <img src="/${this.avatarState}?cb=${this.cacheBuster}" alt="Agent Avatar" id="avatar-img">
-                          </div>
-                          <div id="avatar-label" style="color: ${this.avatarLabelColor}; margin-top: 0;">
-                              <span class="glowing-dot ${this.avatarState === 'error' ? 'error' : this.avatarState.startsWith('think') ? 'thinking' : ''}"></span>
-                              ${this.avatarLabelText}
-                          </div>
-                      </div>
-                  </div>
+      <div id="app-container">
+        <!-- FIXED HEADER (TOP) -->
+        <header id="fixed-header">
+          <!-- 1. System Info & Operational Readout (Column 1) -->
+          <div class="header-left-pane">
+            <div class="header-sysinfo">
+              <div class="sysinfo-title-row">
+                <span class="sys-badge">[SYS]</span>
+                <span class="sys-title">EMERGENCY DIAGNOSTIC AGENT</span>
+                <span class="health-badge ${this.systemStatus.health.toLowerCase()}">
+                  <span class="pulse-dot ${this.systemStatus.health.toLowerCase()}"></span>
+                  HEALTH: ${this.systemStatus.health} [OK]
+                </span>
               </div>
-
-              <div id="canvas-viewport">
-                  <!-- Dynamic A2UI Surfaces Rendered Here -->
-                  ${Array.from(this.activeSurfaces.values())
-                     .filter(surface => this.hasVisibleComponents(surface))
-                     .map(surface => html`
-                     <div class="canvas-surface-container">
-                        <div class="canvas-surface-header">
-                           <span class="surface-title">SURFACE: ${surface.id.toUpperCase()}</span>
-                           <button class="close-btn" @click=${() => this.closeSurface(surface.id)}>[X] CLOSE</button>
-                        </div>
-                        <div class="canvas-surface-body">
-                           <a2ui-surface .surface=${surface}></a2ui-surface>
-                        </div>
-                     </div>
-                  `)}
+              <div class="sysinfo-grid">
+                <div class="spec-item"><span class="k">HOST:</span><span class="v">${this.systemStatus.hostname}</span></div>
+                <div class="spec-item"><span class="k">OS:</span><span class="v">${this.systemStatus.os}</span></div>
+                <div class="spec-item"><span class="k">KERNEL:</span><span class="v">${this.systemStatus.kernel}</span></div>
+                <div class="spec-item"><span class="k">UPTIME:</span><span class="v">${this.systemStatus.uptime}</span></div>
               </div>
+            </div>
 
-              <form id="user-input" @submit=${this.handleSubmit}>
-                  <span id="prompt-symbol">AIDA&gt;</span>
-                  <input type="text" id="message-text" autocomplete="off" autofocus placeholder="State your emergency... (e.g., 'check cpu usage', 'show logs', 'find large tables')" />
-              </form>
+            <!-- Operational Status Readout below System Info -->
+            <div class="header-status-panel">
+              <div class="status-panel-label">OPERATIONAL STATUS READOUT:</div>
+              <div class="status-lcd-bezel">
+                <div class="status-lcd-scanline"></div>
+                <div class="status-lcd-text">${this.statusBarText}</div>
+              </div>
+            </div>
           </div>
+
+          <!-- 2. AIDA's Avatar Column (Column 2) -->
+          <div class="header-avatar-col">
+            <!-- AIDA-AI label at top of avatar -->
+            <div class="avatar-name">AIDA-AI</div>
+
+            <div class="avatar-frame">
+              <img 
+                src="/${this.avatarState}?cb=${this.cacheBuster}" 
+                alt="AIDA Avatar" 
+                class="avatar-img" 
+              />
+            </div>
+
+            <!-- Online status under avatar -->
+            <div class="avatar-badge" style="color: ${this.avatarLabelColor}">
+              <span class="pulse-dot ${this.avatarState === 'error' ? 'error' : this.avatarState.startsWith('think') ? 'thinking' : 'nominal'}"></span>
+              ${this.avatarLabelText}
+            </div>
+
+            <!-- Two buttons below the status -->
+            <div class="header-btns">
+              <button class="hdr-btn" @click=${this.clearSession} title="Reset session">[RESET]</button>
+              <button class="hdr-btn ${this.showLogs ? 'active' : ''}" @click=${this.toggleLogs} title="Toggle logs">[LOGS]</button>
+            </div>
+          </div>
+        </header>
+
+        <!-- FREE CANVAS: Scrollable Conversation Stream -->
+        <main id="canvas-viewport">
+          ${this.turns.length === 1 && this.turns[0].id === 'turn-init' ? html`
+            <div class="empty-state">
+              <div class="empty-banner">--- AIDA TERMINAL SESSION READY ---</div>
+              <div class="empty-hint">State your emergency below or select a diagnostic probe:</div>
+              <div class="quick-prompts">
+                <button class="quick-btn" @click=${() => this.sendMessage('Check system CPU usage and top active processes')}>&gt; Probe CPU & Processes</button>
+                <button class="quick-btn" @click=${() => this.sendMessage('Show system memory and swap allocation')}>&gt; Probe Memory Allocation</button>
+                <button class="quick-btn" @click=${() => this.sendMessage('Check storage volumes and disk space usage')}>&gt; Probe Storage Volumes</button>
+                <button class="quick-btn" @click=${() => this.sendMessage('Analyze network interface throughput')}>&gt; Probe Network Throughput</button>
+              </div>
+            </div>
+          ` : nothing}
+
+          ${this.turns.map(turn => this.renderTurn(turn))}
+        </main>
+
+        <!-- DIAGNOSTIC LOG DRAWER (OPTIONAL) -->
+        ${this.showLogs ? html`
+          <div id="diagnostic-drawer">
+            <div class="drawer-hdr">
+              <span>DIAGNOSTIC LOG STREAM</span>
+              <button class="hdr-btn" @click=${this.toggleLogs}>[X] CLOSE</button>
+            </div>
+            <div class="drawer-body" id="log-window">
+              ${this.logs.map(log => html`
+                <div class="log-entry ${log.type}">
+                  <span class="log-time">${log.time}</span>
+                  <span class="log-content">${log.content}</span>
+                </div>
+              `)}
+            </div>
+          </div>
+        ` : nothing}
+
+        <!-- PROMPT INPUT BAR (BOTTOM PINNED) -->
+        <footer id="input-footer">
+          <form id="user-input" @submit=${this.handleSubmit}>
+            <span id="prompt-symbol">AIDA&gt;</span>
+            <input 
+              type="text" 
+              id="message-text" 
+              autocomplete="off" 
+              autofocus 
+              placeholder="State your emergency... (e.g., 'check cpu usage', 'show logs', 'find large tables')" 
+              ?disabled=${this.isStreaming}
+            />
+            <button type="submit" id="submit-btn" ?disabled=${this.isStreaming}>[TRANSMIT]</button>
+          </form>
+        </footer>
       </div>
     `;
   }

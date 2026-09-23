@@ -9,15 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@a2ui/lit": "^0.9.1",
-    "@a2ui/markdown-it": "^0.0.3",
-    "@a2ui/web_core": "^0.9.1",
+    "@a2ui/lit": "0.11.0",
+    "@a2ui/markdown-it": "^0.1.2",
+    "@a2ui/web_core": "0.11.0",
+    "@ag-ui/a2ui-middleware": "^0.0.10",
+    "@ag-ui/client": "^1.0.0",
+    "@ag-ui/core": "^1.0.0",
     "@lit-labs/signals": "^0.3.0",
     "@lit/context": "^1.1.6",
     "chart.js": "^4.5.1",
     "lit": "^3.3.3"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
   }

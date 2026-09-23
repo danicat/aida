@@ -48,7 +48,7 @@ export class AidaTableElement extends A2uiLitElement<typeof AidaTableApi> {
             <table>
                 <thead>
                     <tr>
-                        ${props.columns.map((col: string) => html`<th>${col}</th>`)}
+                        ${props.columns.map((col: any) => html`<th>${col}</th>`)}
                     </tr>
                 </thead>
                 <tbody>

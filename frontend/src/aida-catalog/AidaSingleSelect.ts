@@ -60,7 +60,7 @@ export class AidaSingleSelectElement extends A2uiLitElement<typeof AidaSingleSel
 
         return html`
             <div class="select-container">
-                ${props.options.map((opt: string) => html`
+                ${props.options.map((opt: any) => html`
                     <div class="option" @click=${() => props.onChange && typeof props.onChange === 'function' && props.onChange({ value: opt })}>
                         <div class="radio-btn ${props.selectedValue === opt ? 'selected' : ''}"></div>
                         <span>${opt}</span>
